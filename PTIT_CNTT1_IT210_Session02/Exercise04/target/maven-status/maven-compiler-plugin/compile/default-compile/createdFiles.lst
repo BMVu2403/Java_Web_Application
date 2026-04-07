@@ -1,0 +1,3 @@
+com\exercise\model\Event.class
+com\exercise\config\WebConfig.class
+com\exercise\controller\EventController.class
