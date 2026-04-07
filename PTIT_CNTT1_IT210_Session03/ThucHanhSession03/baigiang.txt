@@ -1,0 +1,2937 @@
+Lesson 01: Tổng quan về Spring MVC
+ 
+
+1. Đặt vấn đề & Khái niệm MVC
+Để tránh tình trạng “spaghetti code” (trộn lẫn logic xử lý và giao diện HTML) trong các ứng dụng web lớn, kiến trúc MVC (Model - View - Controller) ra đời giúp phân tách ứng dụng thành 3 thành phần chuyên biệt:
+
+Model (Dữ liệu & Logic): Xử lý dữ liệu và luồng nghiệp vụ.
+View (Giao diện): Hiển thị kết quả ra màn hình (HTML, JSP, Thymeleaf).
+Controller (Người điều phối): Tiếp nhận Request, gọi Model và chuyển dữ liệu cho View hiển thị.
+
+
+Mô hình kiến trúc MVC
+
+ 
+
+Spring MVC là bộ khung tiêu chuẩn, mạnh mẽ trong hệ sinh thái Java giúp xây dựng web application theo sát chuẩn kiến trúc MVC.
+
+ 
+
+ 
+
+2. Kiến trúc cốt lõi của Spring MVC
+Hệ thống vận hành xoay quanh mẫu Front Controller với lõi trung tâm là DispatcherServlet.
+
+
+
+Sơ đồ dòng chảy của Spring MVC
+
+ 
+
+Luồng xử lý dữ liệu (Request Flow):
+
+DispatcherServlet: Cổng duy nhất hứng mọi Request HTTP gửi đến.
+HandlerMapping: Đóng vai trò bản đồ, xác định chính xác Controller nào cần xử lý URL vừa nhận.
+Controller: Thực thi logic, đóng gói kết quả cùng “Tên giao diện” vào đối tượng ModelAndView.
+ViewResolver: Chuyển đổi “Tên giao diện” thành đường dẫn tới một file View (HTML/JSP) cụ thể trên hệ thống.
+View: Nhận dữ liệu, kết xuất HTML và trả về cho trình duyệt.
+ 
+
+ 
+
+3. Các tính năng nổi bật
+Annotations nhạy bén: Dùng @Controller, @GetMapping, @PostMapping ánh xạ Request nhanh chóng không cần file XML dài dòng.
+Data Binding hoàn hảo: Tự động map giá trị Form HTML thành Object Java, kèm validate 1 chạm với @Valid.
+Xử lý Exception tập trung: Gom các lỗi toàn hệ thống về xử lý chung tại @ControllerAdvice.
+REST API dễ dàng: Nhanh chóng trả về định dạng JSON qua annotation @RestController hoặc @ResponseBody.
+ 
+
+ 
+
+4. Thực hành: Xây dựng ứng dụng Spring MVC thuần
+Việc tự tay cấu hình một ứng dụng Spring MVC thuần sẽ giúp sinh viên hiểu rõ bản chất hoạt động của Framework thay vì phụ thuộc vào sự tự động (Auto-configuration) của Spring Boot. Chuyên mục này hướng dẫn sử dụng cấu hình Java (Java Config) để loại bỏ hoàn toàn cấu hình định dạng XML.
+
+Bước 1: Cấu hình Dependencies trong build.gradle
+Khởi tạo một dự án Gradle Web Application (chọn Packaging là war) và thêm các thư viện hạt nhân:
+
+plugins {
+    id 'java'
+    id 'war'
+}
+
+group = 'com.demo'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Servlet API — Tomcat 10.x dùng jakarta.servlet (compileOnly: Tomcat đã có sẵn)
+    compileOnly 'jakarta.servlet:jakarta.servlet-api:6.1.0'
+
+    // Trái tim của Spring MVC — tương thích Tomcat 10.x (jakarta.servlet)
+    implementation 'org.springframework:spring-webmvc:7.0.6'
+
+    // JSP API — cần thiết để biên dịch file .jsp
+    implementation 'jakarta.servlet.jsp:jakarta.servlet.jsp-api:3.1.1'
+
+    // JSTL — dùng jakarta namespace, tương thích Tomcat 10.x
+    implementation 'jakarta.servlet.jsp.jstl:jakarta.servlet.jsp.jstl-api:3.0.2'
+}
+
+Lưu ý quan trọng: Dự án dùng Tomcat 10.x (Jakarta EE) nên tất cả import trong Java phải là jakarta.servlet.* (không phải javax.servlet.*). JSTL taglib URI cũng phải dùng jakarta.tags.core (không phải http://java.sun.com/...).
+
+ 
+
+ 
+
+Bước 2: Chỉ điểm khởi tạo DispatcherServlet (Thay thế web.xml)
+Khi Apache Tomcat khởi động, nó sẽ quét ứng dụng để tìm file cấu hình Web. Spring cung cấp Abstract class giúp chúng ta sinh ra DispatcherServlet bằng code Java.
+
+Tạo class MyWebAppInitializer:
+
+package com.demo.config;
+
+import org.springframework.web.servlet.support.AbstractAnnotationConfigDispatcherServletInitializer;
+
+public class MyWebAppInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
+
+    // Nơi khai báo các class cấu hình gốc (Ví dụ: Database, Security, Service)
+    @Override
+    protected Class<?>[] getRootConfigClasses() {
+        return null;
+    }
+
+    // Nơi khai báo class cấu hình cho luồng Web (Controller, ViewResolver)
+    @Override
+    protected Class<?>[] getServletConfigClasses() {
+        return new Class<?>[] { WebConfig.class }; // Sẽ tạo ở Bước 3
+    }
+
+    // Bắt mọi địa chỉ request URL đi vào cổng DispatcherServlet
+    @Override
+    protected String[] getServletMappings() {
+        return new String[] { "/" };
+    }
+}
+
+ 
+
+ 
+
+Bước 3: Cấu hình Web Context (Thay thế spring-servlet.xml)
+Tạo class WebConfig để thông báo cho Spring biết Controllers nằm ở đâu và kết xuất giao diện thế nào.
+
+package com.demo.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.view.InternalResourceViewResolver;
+
+@Configuration
+@EnableWebMvc // Kích hoạt các tính năng của Spring Web MVC
+@ComponentScan(basePackages = "com.demo.controller") // Tự tìm Controller trong package này
+public class WebConfig {
+
+    // Cấu hình ViewResolver: Chỉ đường cho Spring biết các file giao diện nằm ở đâu
+    @Bean
+    public InternalResourceViewResolver viewResolver() {
+        InternalResourceViewResolver resolver = new InternalResourceViewResolver();
+        resolver.setPrefix("/WEB-INF/views/"); // Thư mục cất giấu giao diện
+        resolver.setSuffix(".jsp");            // Định dạng file hiển thị
+        return resolver;
+    }
+}
+
+ 
+
+ 
+
+Bước 4: Viết Controller xử lý luồng đi
+Tạo HelloController nhằm đón Request HTTP, cấp dữ liệu nghiệp vụ và đẩy dữ liệu đó ra View hiển thị.
+
+package com.demo.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Controller
+public class HelloController {
+
+    @GetMapping("/hello")
+    public String sayHello(Model model) {
+        // Đóng gói dữ liệu vào "túi Model" để gửi sang khung View
+        model.addAttribute("message", "Chào mừng bạn đến với Spring MVC thuần!");
+
+        // Trả về Tên logic của View.
+        // ViewResolver ở bước 3 sẽ ghép nối lại thành: /WEB-INF/views/hello.jsp
+        return "hello";
+    }
+}
+
+ 
+
+ 
+
+Bước 5: Tạo Giao diện màn hình (JSP)
+Bên trong thư mục src/main/webapp/WEB-INF/views/, hãy tạo tệp hello.jsp.
+
+Ghi chú: Đặt trong /WEB-INF/ giúp bảo vệ file khỏi các truy cập URL trực tiếp từ trình duyệt.
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<head>
+    <title>Trang đích Spring MVC</title>
+</head>
+<body>
+    <h1>Trình duyệt nhận phản hồi:</h1>
+    <%-- Lấy thông tin từ biến 'message' do Controller gửi trả qua ký pháp EL --%>
+    <h2 style="color: blue;">${message}</h2>
+</body>
+</html>
+
+ 
+
+ 
+
+Bước 6: Đóng gói (Build) & Triển khai (Deploy)
+Trong IntelliJ IDEA, vào Build → Build Artifacts → [tên-war] → Build để tạo file *.war.
+Hoặc chạy lệnh Gradle: ./gradlew war (macOS/Linux) hoặc gradlew.bat war (Windows).
+Tải và cài đặt Web Server Apache Tomcat 10.x (xem hướng dẫn chi tiết tại Lesson 01 Phần 3).
+Hướng dẫn cài Tomcat
+
+Copy file *.war vào thư mục webapps trong thư mục gốc cài đặt Tomcat. Tomcat sẽ tự bung nén.
+Mở trình duyệt và truy cập: http://localhost:8080/ten-thu-muc/hello
+Lưu ý: Dự án này sử dụng Tomcat 10.x (Jakarta EE / jakarta.*). Nếu dùng Tomcat 9.x (Java EE / javax.*), phải thay đổi toàn bộ dependencies và JSTL URI. alt text alt text —
+
+5. Spring MVC và Kiến trúc phân lớp (Layered Architecture)
+5.1. Sự kết hợp giữa Spring MVC và Layered Architecture
+Đây là tiêu chuẩn thường được áp dụng trong các dự án Java quy mô từ vừa đến lớn. Hai khái niệm này đóng vai trò hỗ trợ lẫn nhau nhưng có nhiệm vụ riêng biệt:
+
+Spring MVC: Là framework đóng vai trò xử lý luồng đi của dữ liệu (request/response) trong chương trình.
+Layered Architecture: Là cách tổ chức toàn bộ cấu trúc của hệ thống thành các lớp riêng biệt để quản lý code hiệu quả hơn.
+5.2. Tại sao nên kết hợp cả hai?
+Việc sử dụng Layered Architecture cùng với Spring MVC giúp giải quyết các vấn đề sau:
+
+Tránh quá tải tầng Controller:
+Nếu không có kiến trúc phân lớp, tất cả các xử lý (điều hướng, logic nghiệp vụ, truy vấn database) sẽ bị dồn hết vào Controller.
+Hệ quả: Code Controller trở nên cực kỳ khó đọc và rất khó để tái sử dụng.
+Khả năng thay đổi linh hoạt: Dễ dàng mở rộng hoặc thêm mới các lớp Controller để phục vụ cho nhiều nền tảng khác nhau (như Web, Mobile) mà không cần viết lại toàn bộ logic xử lý bên dưới.
+5.3. Chi tiết về Kiến trúc phân lớp (N-tier Architecture)
+Kiến trúc này còn được gọi là N-tier architecture. Hệ thống được chia thành 4 thành phần (lớp) chính với chức năng riêng biệt:
+
+Tên lớp (Layer)
+
+Thành phần Spring tương ứng
+
+Chức năng chính
+
+Presentation
+
+Controller (@Controller)
+
+Hiển thị dữ liệu và nhận đầu vào (input) từ người dùng
+
+Business
+
+Service (@Service)
+
+Xử lý các logic nghiệp vụ của hệ thống và điều phối các luồng xử lý
+
+Persistence
+
+Repository / DAO (@Repository)
+
+Đóng vai trò trung gian để truy xuất dữ liệu (thực hiện các thao tác CRUD)
+
+Database
+
+(CSDL thực tế: MySQL, PostgreSQL…)
+
+Nơi lưu trữ và quản lý dữ liệu thực tế (hệ quản trị cơ sở dữ liệu)
+
+Minh họa luồng xử lý một request từ người dùng cho đến database:
+
+User (Browser)
+    │
+    ▼
+[Presentation Layer]  — @Controller: nhận request, trả về response/view
+    │
+    ▼
+[Business Layer]      — @Service: xử lý logic nghiệp vụ
+    │
+    ▼
+[Persistence Layer]   — @Repository: truy vấn, cập nhật dữ liệu
+    │
+    ▼
+[Database Layer]      — MySQL / PostgreSQL: lưu trữ dữ liệu
+
+💡 Tóm lại: Việc kết hợp này giúp tách biệt các mối quan tâm (Separation of Concerns), giúp dự án Java Web của bạn dễ bảo trì, mở rộng và chuyên nghiệp hơn.
+
+ 
+
+ 
+
+6. Nguyên tắc thực chiến (Best Practices)
+Thin Controller (Controller Mỏng): Chỉ cho người điều phối chuyển tiếp tín hiệu, dồn logic tính toán nghiệp vụ phức tạp xuống các class Service.
+Chuẩn HTTP Method: GET (đọc/lấy), POST (thêm mới), PUT (sửa), DELETE (xoá).
+View ngốc nghếch: Tránh nhồi mã lệnh logic vào file giao diện (JSP chỉ được phép hiển thị dữ liệu).
+Validate mọi Input: Đừng bao giờ tin tưởng tuyệt đối dữ liệu gửi từ Client.
+ 
+
+ 
+
+7. Tổng kết & Câu hỏi ôn tập
+Lưu ý xương máu: Trong Spring MVC, thay vì học thuộc từng đoạn code, hãy tư duy theo luồng chạy: “Dữ liệu vào từ đâu → Ai đứng đón → Ai nhận để xử lý → Đưa cho ai hiển thị!”
+
+
+Lesson 01 (Phần 2): Khởi tạo Dự án Spring MVC theo Kiến trúc Phân tầng
+ 
+
+Mục tiêu bài học
+Sau khi hoàn thành bài này, sinh viên có thể:
+
+Khởi tạo cấu trúc thư mục dự án Spring MVC theo đúng kiến trúc 4 tầng (Layered Architecture).
+Hiểu vai trò và nội dung của từng file cấu hình: build.gradle, AppInitializer, AppConfiguration.
+Cấu hình ViewResolver để Spring tự động tìm và render file .jsp từ tên view trả về trong Controller.
+Giải thích được toàn bộ luồng xử lý Request từ trình duyệt → Controller → View.
+ 
+
+ 
+
+1. Cấu trúc thư mục dự án (Project Structure)
+Một dự án Spring MVC thuần (không dùng Spring Boot) cần được tổ chức theo kiến trúc phân tầng để đảm bảo tính dễ bảo trì và mở rộng. Dưới đây là cấu trúc chuẩn:
+
+session-02-spring-mvc-jsp-jstl/
+├── build.gradle                         ← File cấu hình thư viện (Gradle)
+└── src/
+    └── main/
+        ├── java/
+        │   └── com/re/session02/
+        │       ├── configuration/       ← Tầng cấu hình Java-based
+        │       │   ├── AppConfiguration.java
+        │       │   └── AppInitializer.java
+        │       ├── controller/          ← Tầng điều hướng (Presentation Layer)
+        │       │   └── GreetingController.java
+        │       ├── model/               ← Tầng dữ liệu (POJO / Entity)
+        │       ├── repository/          ← Tầng truy vấn DB (DAO / Persistence Layer)
+        │       └── service/             ← Tầng xử lý nghiệp vụ (Business Layer)
+        ├── resources/                   ← File cấu hình khác (properties, xml...)
+        └── webapp/
+            └── WEB-INF/
+                └── view/                ← Chứa các file giao diện .jsp
+                    └── greeting.jsp
+
+Giải thích từng tầng (Layer):
+
+Tầng
+
+Package
+
+Vai trò
+
+Configuration
+
+configuration/
+
+Cấu hình Spring Container: khai báo Bean, ViewResolver, khởi tạo DispatcherServlet
+
+Presentation
+
+controller/
+
+Nhận Request, gọi Service, đóng gói dữ liệu vào Model, trả về tên View
+
+Business
+
+service/
+
+Xử lý logic nghiệp vụ (tính toán, quy tắc kinh doanh)
+
+Persistence
+
+repository/
+
+Giao tiếp với Database, thực hiện CRUD
+
+Model
+
+model/
+
+Chứa các POJO/Entity đại diện cho dữ liệu trong hệ thống
+
+ Lưu ý kiến trúc: Ở giai đoạn đầu học, bạn sẽ chỉ tạo Controller và View. Các tầng Service, Repository, Model sẽ được lấp đầy dần theo từng bài học nâng cao.
+
+ 
+
+ 
+
+2. Chi tiết mã nguồn từng file
+File 1: build.gradle — Khai báo thư viện
+build.gradle là “tờ khai” cho Gradle biết cần tải về những thư viện nào. Đây là cấu hình điểm khởi đầu cho một dự án Spring MVC:
+
+plugins {
+    id 'java'
+    id 'war'
+}
+
+group = 'com.re'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    junitVersion = '5.13.2'
+}
+
+sourceCompatibility = '21'
+targetCompatibility = '21'
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    // Servlet API — Tomcat sẽ cung cấp khi chạy (compileOnly)
+    compileOnly('jakarta.servlet:jakarta.servlet-api:6.1.0')
+
+    // Spring MVC — framework cốt lõi
+    implementation("org.springframework:spring-webmvc:7.0.6")
+
+    // JSP API — cần thiết để biên dịch file .jsp
+    implementation("jakarta.servlet.jsp:jakarta.servlet.jsp-api:3.1.1")
+
+    // JSTL API — thư viện thẻ chuẩn cho JSP
+    implementation("jakarta.servlet.jsp.jstl:jakarta.servlet.jsp.jstl-api:3.0.2")
+
+    // JUnit — framework kiểm thử tự động
+    testImplementation("org.junit.jupiter:junit-jupiter-api:${junitVersion}")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:${junitVersion}")
+}
+
+test {
+    useJUnitPlatform()
+}
+
+Giải thích các dependency chính:
+
+Dependency
+
+Mục đích
+
+Scope
+
+jakarta.servlet-api:6.1.0
+
+API Servlet — Tomcat đã có sẵn, không cần đóng gói vào WAR
+
+compileOnly
+
+spring-webmvc:7.0.6
+
+Thư viện lõi Spring MVC — DispatcherServlet, Controller, ViewResolver
+
+implementation
+
+jakarta.servlet.jsp-api:3.1.1
+
+API để biên dịch file .jsp
+
+implementation
+
+jakarta.servlet.jsp.jstl-api:3.0.2
+
+API JSTL — dùng thẻ <c:forEach>, <fmt:...> trong JSP
+
+implementation
+
+ Lưu ý scope compileOnly: Servlet API chỉ cần trong lúc biên dịch (compile-time). Khi chạy (runtime), Tomcat đã cung cấp sẵn — nếu thêm vào WAR sẽ gây xung đột.
+
+ 
+
+ 
+
+File 2: AppInitializer.java — Thay thế web.xml
+Trong Spring MVC hiện đại, ta dùng Java class để khởi tạo DispatcherServlet thay cho file web.xml cũ kỹ. Class này kế thừa AbstractAnnotationConfigDispatcherServletInitializer — Tomcat tự động phát hiện khi khởi động.
+
+package com.re.session02.configuration;
+
+import org.springframework.web.servlet.support.AbstractAnnotationConfigDispatcherServletInitializer;
+
+public class AppInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
+
+    // Cấu hình gốc của toàn ứng dụng (Bean dùng chung: Service, Repository, DataSource...)
+    @Override
+    protected Class<?>[] getRootConfigClasses() {
+        return new Class[]{AppConfiguration.class};
+    }
+
+    // Cấu hình riêng cho DispatcherServlet (Controller, ViewResolver...)
+    // Hiện tại để trống vì AppConfiguration đã gộp chung ở trên
+    @Override
+    protected Class<?>[] getServletConfigClasses() {
+        return new Class[0];
+    }
+
+    // Đăng ký DispatcherServlet bắt tất cả URL ("/" = mọi request)
+    @Override
+    protected String[] getServletMappings() {
+        return new String[]{"/"};
+    }
+}
+
+Cơ chế hoạt động:
+
+Tomcat khởi động
+    │
+    ├── Phát hiện AppInitializer (implements WebApplicationInitializer)
+    │
+    ├── Gọi getRootConfigClasses() → nạp AppConfiguration vào Root Context
+    │
+    └── Đăng ký DispatcherServlet bắt tất cả URL "/"
+
+Tại sao getServletConfigClasses() trả về mảng rỗng? Trong cấu trúc đơn giản ban đầu, ta gộp tất cả cấu hình vào AppConfiguration thông qua getRootConfigClasses(). Khi dự án mở rộng (nhiều DispatcherServlet, nhiều context), ta mới cần tách ra.
+
+ 
+
+ 
+
+File 3: AppConfiguration.java — Cấu hình Spring Web Context
+File này có 3 nhiệm vụ chính: bật Web MVC, chỉ Spring nơi tìm @Controller, và cấu hình cách phân giải tên View thành file .jsp.
+
+package com.re.session02.configuration;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.ViewResolver;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurationSupport;
+import org.springframework.web.servlet.view.InternalResourceViewResolver;
+
+@Configuration                          // Đây là class cấu hình Spring
+@EnableWebMvc                           // Bật toàn bộ tính năng Spring Web MVC
+@ComponentScan("com.re.session02")      // Quét toàn bộ package để tìm @Controller, @Service...
+public class AppConfiguration extends WebMvcConfigurationSupport {
+
+    // Cấu hình ViewResolver: Chỉ đường cho Spring biết file JSP nằm ở đâu
+    @Bean
+    public ViewResolver viewResolver() {
+        InternalResourceViewResolver viewResolver = new InternalResourceViewResolver();
+        viewResolver.setPrefix("/WEB-INF/view/");  // Thư mục chứa file JSP
+        viewResolver.setSuffix(".jsp");             // Đuôi mở rộng của file giao diện
+        return viewResolver;
+    }
+}
+
+Giải thích cơ chế ViewResolver:
+
+Khi Controller trả về chuỗi "greeting", ViewResolver tự ghép nối:
+
+"greeting"  →  prefix + tên + suffix  →  /WEB-INF/view/greeting.jsp
+
+Thành phần
+
+Giá trị
+
+prefix
+
+/WEB-INF/view/
+
+Tên view trả về
+
+greeting
+
+suffix
+
+.jsp
+
+Đường dẫn cuối cùng
+
+/WEB-INF/view/greeting.jsp
+
+@EnableWebMvc vs WebMvcConfigurationSupport: Khi class extends WebMvcConfigurationSupport, annotation @EnableWebMvc trở nên dư thừa (redundant) vì WebMvcConfigurationSupport đã bao gồm tất cả chức năng đó. Trong dự án thực tế, bạn chọn một trong hai cách — không dùng cả hai cùng lúc.
+
+ 
+
+ 
+
+File 4: GreetingController.java — Tầng Presentation
+Controller là trung tâm điều phối. Nó nhận Request, chuẩn bị dữ liệu, và chỉ định View nào sẽ hiển thị.
+
+package com.re.session02.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Controller                         // Đánh dấu class này là Controller (Spring quản lý)
+public class GreetingController {
+
+    @GetMapping("/greeting")        // Map URL /greeting vào phương thức này
+    public String sayHello(Model model) {
+        // Đóng gói dữ liệu vào Model — JSP sẽ đọc qua EL ${message}
+        model.addAttribute("message", "Chào mừng bạn đến với Spring MVC!");
+
+        // Trả về tên logic của View (ViewResolver sẽ ghép thành đường dẫn đầy đủ)
+        return "greeting"; // → /WEB-INF/view/greeting.jsp
+    }
+}
+
+Quy tắc “Thin Controller” (Controller Mỏng):
+
+Controller chỉ nên làm 3 việc: 1. Nhận tham số từ Request (@RequestParam, @PathVariable, @RequestBody). 2. Gọi phương thức của Service để xử lý nghiệp vụ. 3. Đẩy kết quả vào Model và trả về tên View.
+
+Mọi logic tính toán, quy tắc nghiệp vụ đều phải xuống tầng Service — không được viết trong Controller.
+
+ 
+
+ 
+
+File 5: greeting.jsp — Tầng View (Giao diện)
+File JSP chỉ có nhiệm vụ hiển thị dữ liệu mà Controller đã chuẩn bị sẵn trong Model:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<head>
+    <title>Greeting Page</title>
+</head>
+<body>
+    <%-- Dùng Expression Language (EL) để đọc dữ liệu từ Model --%>
+    <h1>${message}</h1>
+</body>
+</html>
+
+Vì sao JSP nằm trong /WEB-INF/view/?
+
+Thư mục /WEB-INF/ được Tomcat bảo vệ đặc biệt — người dùng không thể truy cập trực tiếp qua URL như http://localhost:8080/WEB-INF/view/greeting.jsp. File JSP chỉ có thể được gọi thông qua luồng Spring MVC (qua Controller và ViewResolver), đảm bảo mọi request đều được kiểm soát.
+
+ 
+
+ 
+
+3. Luồng xử lý Request (Spring MVC Request Flow)
+Khi người dùng gõ http://localhost:8080/session02/greeting trên trình duyệt, đây là chuỗi sự kiện diễn ra:
+
+Trình duyệt (Browser)
+
+    │   GET /session02/greeting
+
+    ▼
+
+┌─────────────────────────────────────────────────────────────────┐
+
+│                      Tomcat Server                              │
+
+│                                                                 │
+
+│  ┌──────────────────────────────────────────────────────────┐  │
+
+│  │              DispatcherServlet (Cổng đón)                │  │
+
+│  │  (AppInitializer đã đăng ký bắt tất cả "/")             │  │
+
+│  └──────────────────────┬───────────────────────────────────┘  │
+
+│                          │ Hỏi: URL này do ai xử lý?           │
+
+│  ┌──────────────────────▼───────────────────────────────────┐  │
+
+│  │                  HandlerMapping                          │  │
+
+│  │  Tìm thấy: @GetMapping("/greeting") → GreetingController │  │
+
+│  └──────────────────────┬───────────────────────────────────┘  │
+
+│                          │                                      │
+
+│  ┌──────────────────────▼───────────────────────────────────┐  │
+
+│  │            GreetingController.sayHello()                 │  │
+
+│  │  model.addAttribute("message", "Chào mừng...")          │  │
+
+│  │  return "greeting"                                       │  │
+
+│  └──────────────────────┬───────────────────────────────────┘  │
+
+│                          │ Tên view: "greeting"                 │
+
+│  ┌──────────────────────▼───────────────────────────────────┐  │
+
+│  │              InternalResourceViewResolver                │  │
+
+│  │  /WEB-INF/view/ + "greeting" + .jsp                     │  │
+
+│  │  → /WEB-INF/view/greeting.jsp                           │  │
+
+│  └──────────────────────┬───────────────────────────────────┘  │
+
+│                          │                                      │
+
+│  ┌──────────────────────▼───────────────────────────────────┐  │
+
+│  │                  greeting.jsp                            │  │
+
+│  │  Đọc ${message} → render HTML                           │  │
+
+│  └──────────────────────┬───────────────────────────────────┘  │
+
+└─────────────────────────┼───────────────────────────────────────┘
+
+                           │  HTTP Response (HTML)
+
+                           ▼
+
+                     Trình duyệt hiển thị:
+
+                     "Chào mừng bạn đến với Spring MVC!"
+
+ 
+
+Tóm tắt 5 bước:
+
+Bước
+
+Thành phần
+
+Hành động
+
+1
+
+Trình duyệt
+
+Gửi GET /greeting
+
+2
+
+DispatcherServlet
+
+Nhận request, hỏi HandlerMapping ai xử lý
+
+3
+
+GreetingController
+
+Thực thi sayHello(), đẩy dữ liệu vào Model, trả về "greeting"
+
+4
+
+ViewResolver
+
+Ghép prefix + suffix → /WEB-INF/view/greeting.jsp
+
+5
+
+greeting.jsp
+
+Render HTML với dữ liệu từ Model, trả về trình duyệt
+
+ 
+
+ 
+
+4. Tổng kết
+Dự án Spring MVC được tổ chức theo 4 tầng: Configuration, Controller, Service, Repository — mỗi tầng có trách nhiệm riêng biệt theo nguyên lý Separation of Concerns.
+AppInitializer thay thế web.xml — đăng ký DispatcherServlet bằng code Java thuần.
+AppConfiguration thiết lập ViewResolver — ràng buộc tên View logic với đường dẫn file JSP thực tế.
+Controller chỉ làm việc điều phối — mọi logic nghiệp vụ phải xuống tầng Service.
+File JSP đặt trong /WEB-INF/view/ để được Tomcat bảo vệ, ngăn truy cập URL trực tiếp.
+
+
+Lesson 01 (Phần 3): Tải & Tích hợp Apache Tomcat 10 vào IntelliJ IDEA
+Phần 1 — Tải Tomcat 10
+Bước 1: Truy cập trang chủ
+Mở trình duyệt, vào địa chỉ:
+
+         
+    https://tomcat.apache.org/download-10.cgi    
+         
+
+Bước 2: Chọn đúng file cần tải
+Trong trang, tìm mục "Binary Distributions" → "Core":
+
+Bạn dùng hệ điều hành nào?
+
+File cần tải
+
+Windows
+
+apache-tomcat-10.1.x.zip
+
+macOS / Linux
+
+apache-tomcat-10.1.x.tar.gz
+
+  Chọn file `.zip` (không phải .exe). File .zip chỉ cần giải nén, không cần cài đặt — dễ kiểm soát và xóa khi cần.
+
+Bước 3: Giải nén
+Giải nén vào một thư mục không có dấu cách và ký tự đặc biệt:
+
+         
+    ✅ Nên:   C:\servers\apache-tomcat-10.1.x    
+    ✅ Nên:   C:\tools\tomcat10    
+         
+    ❌ Tránh: C:\Program Files\Tomcat          (có dấu cách)    
+    ❌ Tránh: D:\Học liệu Java\Tomcat           (có ký tự tiếng Việt)    
+         
+
+Vậy là xong bước tải — bạn không cần làm gì thêm với Tomcat. IntelliJ sẽ lo toàn bộ phần còn lại.
+
+Phần 2 — Tích hợp Tomcat vào IntelliJ IDEA
+Bước 1: Kiểm tra plugin Tomcat
+Chỉ cần làm bước này một lần duy nhất.
+Vào File → Settings (Ctrl + Alt + S) → Plugins → tìm kiếm "Tomcat".
+
+Đảm bảo plugin "Tomcat and TomEE" đang được bật (enabled). Nếu chưa, bật lên và restart IntelliJ.
+
+Bước 2: Mở cửa sổ Run/Debug Configurations
+Vào menu trên cùng: Run → Edit Configurations…
+
+Hoặc nhấn vào dropdown chọn cấu hình ở góc trên phải (cạnh nút ▶) → “Edit Configurations...”
+
+Bước 3: Thêm cấu hình Tomcat mới
+1. Nhấn nút `+` (Add New Configuration) ở góc trên bên trái cửa sổ.
+
+2. Trong danh sách xổ xuống, chọn "Tomcat Server" → “Local”
+
+Bước 4: Cấu hình tab "Server"
+Bạn sẽ thấy form cấu hình với 2 tab: Server và Deployment
+
+Ở tab Server, điền các thông tin sau:
+
+① Đặt tên (Name):
+
+         
+    Tomcat 10 - Local    
+         
+
+(Đặt tên tùy ý, chỉ để bạn nhận biết)
+
+② Chọn thư mục Tomcat (Application server):
+
+Nhấn "Configure..." → nhấn `+` → dẫn đến thư mục vừa giải nén ở Phần 1.
+
+         
+    C:\servers\apache-tomcat-10.1.x    
+         
+
+IntelliJ sẽ tự nhận diện và hiển thị: Tomcat 10.1.x — nghĩa là đã thành công.
+
+③ Kiểm tra các trường còn lại (giữ nguyên mặc định):
+
+Trường
+
+Giá trị
+
+HTTP port
+
+8080
+
+JRE
+
+JDK 21 (IntelliJ tự chọn)
+
+On 'Update' action
+
+Redeploy
+
+Bước 5: Cấu hình tab "Deployment"
+Chuyển sang tab "Deployment" (ngay cạnh tab Server).
+
+1. Nhấn `+` → chọn "Artifact..."
+
+2. Trong danh sách hiện ra, chọn `[tên-project]:war exploded`⚠️ Chọn đúng **`war exploded`** (không phải `war`). Dạng `exploded` giúp IntelliJ phản ánh thay đổi code nhanh hơn trong quá trình phát triển.
+
+3. Chỉnh "Application context" — đây là đường dẫn gốc của ứng dụng:
+
+Bạn muốn URL như thế nào?
+
+Application context
+
+http://localhost:8080/greeting
+
+/
+
+http://localhost:8080/session02/greeting
+
+/session02
+
+4. Nhấn "Apply" → "OK".
+
+Bước 6: Chạy ứng dụng
+Nhấn ▶ Run (hoặc Shift + F10).
+
+IntelliJ sẽ:
+
+1. Build project → tạo file .war exploded
+
+2. Khởi động Tomcat 10
+
+3. Deploy ứng dụng lên Tomcat
+
+4. Tự mở trình duyệt tại URL đã cấu hình
+
+Nếu thấy trang web hiển thị → tích hợp thành công!
+
+Phần 3 — Nếu gặp sự cố
+❌ Không thấy mục "Tomcat Server" trong danh sách
+Nguyên nhân: Plugin chưa được bật.
+
+Cách sửa: File → Settings → Plugins → tìm "Tomcat and TomEE" → Enable → Restart IntelliJ.
+
+❌ Lỗi "Port 8080 already in use"
+Nguyên nhân: Cổng 8080 đang bị một ứng dụng khác chiếm (Skype, dự án khác đang chạy...).
+
+Cách sửa nhanh nhất: Mở Task Manager (Ctrl + Shift + Esc) → tìm tiến trình Java đang chạy → End Task.
+
+Hoặc đổi port Tomcat sang 8081 trong cấu hình Run (tab Server, trường "HTTP port").
+
+❌ Không thấy war exploded trong tab Deployment
+Nguyên nhân: Chưa tạo Artifact cho project.
+
+Cách sửa:
+
+1. Vào File → Project Structure (Ctrl + Alt + Shift + S)
+
+2. Chọn "Artifacts" → nhấn `+`
+
+3. Chọn "Web Application: Exploded" → "From Modules..." → chọn module của bạn → OK
+
+4. Apply → OK → quay lại cấu hình Run/Debug và thêm artifact vừa tạo
+
+❌ Lỗi ClassNotFoundException: jakarta.servlet.*
+Nguyên nhân: Code đang import javax.servlet.* (namespace cũ của Tomcat 9) thay vì jakarta.servlet.*.
+
+Cách sửa: Tìm và thay toàn bộ import javax.servlet → import jakarta.servlet trong các file Java của bạn
+
+Tổng kết — 3 điều cần nhớ
+1. Tomcat = máy chủ chạy ứng dụng web của bạn — không có nó, code Spring MVC không thể chạy.
+
+2. Chỉ cần giải nén Tomcat, sau đó chỉ đường cho IntelliJ — không cần cài đặt, không cần biến môi trường.
+
+3. Mọi thao tác Start/Stop Tomcat đều thực hiện từ IntelliJ — bấm ▶ để start, bấm ■ để stop.
+
+Liên kết hữu ích
+🔗 Tải Tomcat 10: https://tomcat.apache.org/download-10.cgi
+🔗 Hướng dẫn IntelliJ + Tomcat (JetBrains): https://www.jetbrains.com/help/idea/tomcat-and-tomee.html
+
+
+Lesson 02: Giới thiệu về JSP & Vòng đời của JSP
+1. Đặt vấn đề
+Trước đây, để tạo một trang web có dữ liệu thay đổi động (như lấy thông tin tài khoản từ Database), lập trình viên Java dùng Servlet. Tuy nhiên, việc phải dùng code Java để in ra từng dòng HTML là “ác mộng” — rườm rà, khó sửa diện mạo.
+
+JSP (JavaServer Pages) ra đời để giải quyết vấn đề này. Nếu Servlet là “viết HTML bên trong file Java”, thì JSP lật ngược lại: cho phép bạn “viết code Java bên trong file HTML”. Điều này giúp việc xây dựng nội dung giao diện web (View) trở nên trực quan và dễ chịu hơn rất nhiều.
+
+2. Định nghĩa về JSP
+JSP là công nghệ tạo trang web động chạy trên nền tảng Server (máy chủ).
+
+3 điểm cốt lõi bạn cần nhớ:
+
+Bản chất JSP chính là Servlet: Dù có đuôi là .jsp, nhưng khi chạy, máy chủ (như Tomcat) sẽ ngầm biên dịch nó thành một class Servlet. Vì thế, nó có toàn bộ sức mạnh và độ bảo mật của Java.
+Cú pháp thân thiện: Hỗ trợ chèn code Java vào giao diện qua các thẻ cực nhanh như <% Java ở đây %> và Expression Language (VD: ${ten_bien}).
+Thư viện JSTL mạnh mẽ: Cho phép tạo vòng lặp hay đặt điều kiện if/else ngay trên mã HTML một cách gọn gàng, giảm thiểu phải dùng code Java thô. (JSTL sẽ được học chi tiết ở Lesson 05)
+ 
+
+Kiến trúc hoạt động của JSP (JSP Architecture)
+Về mặt kiến trúc tổng thể, JSP vận hành theo mô hình Client - Server và có sự tham gia của một “cỗ máy” cốt lõi là JSP Engine:
+
+Client (Trình duyệt): Nơi người dùng thực hiện thao tác (nhập form, click link) và gửi HTTP Request đi.
+Web Server / Web Container (Như Tomcat): Có nhiệm vụ phân loại Request. Nếu truy cập gọi một trang tĩnh (.html), nó trả file về luôn. Ngược lại, nếu gọi một trang động (.jsp), luồng xử lý sẽ được chuyền tay sang cho JSP Engine.
+JSP Engine (Động cơ xử lý): Bộ máy thao tác và dịch thuật. Engine này phân tích file .jsp, chạy các lệnh Java được nhúng bên trong, sau đó tổng hợp kết quả (kết hợp với dữ liệu kéo lên từ Database nếu có) để sinh ra một mã HTML thuần tuý hoàn chỉnh.
+Cuối cùng, khối HTML đó được đóng gói thành một HTTP Response và chuyển phát trả lại cho Client hiển thị.
+
+
+Kiến trúc hoạt động JSP
+
+ 
+
+3. Vòng đời hoạt động của JSP (JSP Lifecycle)
+Vòng đời của JSP được định nghĩa là quá trình từ khi nó được tạo ra cho đến khi nó bị hủy. Vòng đời của JSP cũng tương tự như vòng đời của Servlet, với một bước bổ sung đặc trưng: biên dịch từ file .jsp thành Servlet trước khi có thể phục vụ Request.
+
+Việc hiểu về vòng đời của JSP chính là chìa khoá để hiểu bản chất hoạt động của JSP.
+
+
+
+Vòng đời JSP
+
+Theo quy chuẩn, toàn bộ chu trình sống của một trang JSP được chia rành mạch thành 4 pha (Phases):
+
+ 
+
+Pha 1 — Biên dịch (Compilation)
+Khi trình duyệt yêu cầu một file JSP, hệ thống xử lý (JSP Engine) sẽ kiểm tra xem file này có cần phải đem đi biên dịch hay không (Ví dụ: Trang chạy lần đầu tiên, hoặc mã file đã bị chỉnh sửa). Quá trình biên dịch bao gồm 3 thao tác theo thứ tự:
+
+Phân tích cú pháp (Parsing): Cỗ máy sẽ phân tích các thẻ JSP bên trong mã HTML.
+Chuyển hóa (Translation): Biến toàn bộ nội dung thành mã nguồn của một Servlet thuần (file .java).
+Biên dịch (Compilation): Tiến hành dịch Servlet đó thành mã Bytecode (file .class).
+ 
+
+Pha 2 — Khởi tạo (Initialization)
+Sau khi file .class được nạp (load) vào JVM, Web Container kích hoạt phương thức jspInit() trước khi bắt đầu tiếp đón người truy cập.
+
+Đặc điểm: Chỉ được gọi ra đúng một lần duy nhất trong toàn bộ vòng đời.
+Nhiệm vụ: Để lập trình viên chủ động ghi đè (override) để nạp cấu hình ban đầu, mở kết nối tĩnh.
+Ghi chú: Lập trình viên có thể ghi đè jspInit() bằng cách dùng cặp thẻ Declarations <%! ... %> trong file .jsp:
+
+<%!
+public void jspInit() {
+    // Trong Spring MVC, việc nạp Database thường giao cho Bean.
+    // Nếu muốn thực hiện khởi tạo riêng cho JSP này, code sẽ ở đây:
+    System.out.println("Pha Khởi Tạo: Container đang nạp trang JSP lần đầu!");
+}
+%>
+
+ 
+
+Pha 3 — Thực thi (Execution)
+Giai đoạn Thực thi diễn ra mỗi khi có Request từ người dùng gửi đến. JSP Engine tự động gọi phương thức _jspService() để xử lý.
+
+Phương thức này nhận hai tham số cốt lõi: HttpServletRequest (hứng yêu cầu) và HttpServletResponse (xuất kết quả).
+Nó chịu trách nhiệm xử lý đầy đủ các phương thức HTTP (GET, POST, PUT, DELETE…).
+Đây là phương thức duy nhất được gọi lặp đi lặp lại — một lần cho mỗi Request.
+Lưu ý quan trọng: _jspService() là phương thức do JSP Engine tự động sinh ra — lập trình viên không được phép và không cần ghi đè (override) phương thức này. Đoạn mô phỏng dưới đây chỉ là mã giả (pseudo-code) để minh hoạ bản chất bên trong:
+
+// ĐÂY LÀ MÃ GIẢ (PSEUDO-CODE) — mô phỏng những gì JSP Engine tự làm.
+// Lập trình viên KHÔNG viết đoạn code này trong dự án thực tế.
+void _jspService(HttpServletRequest request, HttpServletResponse response) {
+    // 1. Nhận dữ liệu do @Controller của Spring gửi sang qua request attribute
+    String strMessage = (String) request.getAttribute("message");
+
+    // 2. Build giao diện và trả về phía Client trình duyệt
+    PrintWriter out = response.getWriter();
+    out.println("<html><body>");
+    out.println("<h2>Spring MVC truyền xuống tin điệp: " + strMessage + "</h2>");
+    out.println("</body></html>");
+}
+
+Pha 4 — Hủy / Dọn dẹp (Cleanup)
+Giai đoạn Hủy xảy ra khi trang JSP không còn được Web Container cần tới nữa (Ví dụ: Tắt Apache Tomcat).
+
+Phương thức jspDestroy() (tương đương với cơ chế destroy của Servlet gốc) sẽ được gọi.
+Nhiệm vụ: Chạy các lệnh dọn dẹp, đóng kết nối tài nguyên, tránh rò rỉ bộ nhớ (memory leak).
+<%!
+public void jspDestroy() {
+    // Code dọn dẹp tài nguyên tĩnh thủ công nằm ở đây
+    System.out.println("Pha Hủy: Trang JSP đang bị dọn rác bộ nhớ...");
+}
+%>
+
+ 
+
+4. Tổng kết và lưu ý
+Thin View (Giới hạn trách nhiệm JSP): Trong hệ sinh thái Spring MVC thuần, JSP chỉ là “Gương mặt vô tri để show dữ liệu”. Tuyệt đối không được gắn xử lý logic tính toán, gọi Database hay vòng lặp nghiệp vụ phức tạp ngay ở JSP. Logic đó thuộc về Controller và Service.
+Bảo vệ file JSP: File JSP trong môi trường công nghiệp thường bị đặt bên trong thư mục /WEB-INF/views/. Người dùng không thể gõ URL để gọi file trực tiếp, mà phải đi qua ViewResolver của Spring từ tầng Controller.
+
+
+Lesson 03: Cú pháp Căn bản của JSP
+Mục tiêu bài học: Sau bài này, sinh viên nắm chắc toàn bộ các loại thẻ (Tag) và cú pháp đặc thù của JSP, biết khi nào dùng loại nào và áp dụng đúng cách trong mô hình Spring MVC thuần.
+
+1. Cú pháp JSP
+Một file .jsp về bố cục trông như một file HTML thông thường, nhưng được trang bị thêm 6 nhóm cú pháp đặc biệt dưới đây để nhúng và xử lý logic Java bên trong.
+
+1.1. Scriptlet <% ... %>
+Định nghĩa: Là thẻ cơ bản nhất, dùng để nhúng một hoặc nhiều câu lệnh Java thuần vào bên trong trang JSP. Code bên trong Scriptlet sẽ được thực thi mỗi khi có Request gọi đến trang.
+
+Cú pháp:
+
+<%
+    // Các câu lệnh Java viết ở đây
+    // Có thể dùng biến, điều kiện if-else, vòng lặp for,...
+%>
+
+Ví dụ thực tế trong Spring MVC thuần:
+
+Controller gửi dữ liệu đặt vào request attribute, và JSP dùng Scriptlet để lấy ra và xử lý logic nhỏ:
+
+// HelloController.java - Tầng Controller (Spring MVC thuần)
+@Controller
+public class HelloController {
+    @GetMapping("/greeting")
+    public String greeting(HttpServletRequest request) {
+        request.setAttribute("username", "Minh");
+        request.setAttribute("score", 85);
+        return "greeting"; // ViewResolver sẽ chiếu sang /WEB-INF/views/greeting.jsp
+    }
+}
+
+<%-- greeting.jsp - Tầng View --%>
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<body>
+<%
+    String username = (String) request.getAttribute("username");
+    int score = (Integer) request.getAttribute("score");
+
+    String rank;
+    if (score >= 90) {
+        rank = "Xuất sắc";
+    } else if (score >= 80) {
+        rank = "Giỏi";
+    } else if (score >= 70) {
+        rank = "Khá";
+    } else if (score >= 60) {
+        rank = "Trung bình khá";
+    } else if (score >= 50) {
+        rank = "Trung bình";
+    } else {
+        rank = "Yếu";
+    }
+%>
+<h2>Chào, <%= username %>! Xếp loại của bạn: <%= rank %></h2>
+</body>
+</html>
+
+Lưu ý quan trọng: Trong chuẩn thiết kế Spring MVC, hạn chế tối đa việc đặt logic phức tạp vào Scriptlet. Hãy để Controller/Service xử lý, JSP chỉ nhận kết quả và in ra.
+
+ 
+
+1.2. Expression <%= ... %>
+Định nghĩa: Là thẻ dùng để in trực tiếp giá trị của một biến hoặc biểu thức Java ra trang HTML. Kết quả sẽ được tự động chuyển thành chuỗi và gắn thẳng vào vị trí khai báo.
+
+Cú pháp:
+
+<%= biểu_thức_java %>
+
+Điểm phân biệt then chốt: Expression <%= %> không có dấu chấm phẩy ; ở cuối, vì nó là biểu thức (có giá trị trả về), không phải câu lệnh. Nếu thêm ; sẽ bị lỗi biên dịch.
+
+Ví dụ:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<body>
+    <p>Họ tên: <%= request.getAttribute("username") %></p>
+    <p>Điểm: <%= request.getAttribute("score") %></p>
+    <p>Giờ hiện tại: <%= new java.util.Date() %></p>
+</body>
+</html>
+
+ 
+
+1.3. Declaration <%! ... %>
+Định nghĩa: Dùng để khai báo biến toàn cục (instance variable) hoặc phương thức (method) ở cấp độ class của Servlet được sinh ra từ trang JSP. Biến/phương thức này là thành viên của class Servlet, tồn tại xuyên suốt vòng đời Servlet và được chia sẻ giữa mọi Request.
+
+Cú pháp:
+
+<%!
+    // Khai báo biến toàn cục hoặc phương thức ở đây
+%>
+
+Ví dụ:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<%!
+    // Khai báo phương thức tiện ích dùng chung trong trang
+    private String xepLoai(int diem) {
+        if (diem >= 90) return "Xuất sắc";
+        if (diem >= 80) return "Giỏi";
+        if (diem >= 70) return "Khá";
+        if (diem >= 60) return "Trung bình khá";
+        if (diem >= 50) return "Trung bình";
+        return "Yếu";
+    }
+
+    // Khai báo biến đếm lượt truy cập (chia sẻ giữa các request)
+    private int luotTruyCap = 0;
+%>
+<html>
+<body>
+<%
+    luotTruyCap++;
+    int score = (Integer) request.getAttribute("score");
+%>
+<p>Xếp loại: <%= xepLoai(score) %></p>
+<p>Trang này đã được truy cập: <%= luotTruyCap %> lần</p>
+</body>
+</html>
+
+Cẩn thận với biến toàn cục trong Declaration: Biến được khai báo bởi <%! là dùng chung (shared) giữa tất cả các Request/người dùng đồng thời. Điều này có thể gây ra lỗi tranh chấp dữ liệu (Race Condition) trong môi trường nhiều người dùng. Trong Spring MVC thuần, hãy cẩn trọng khi sử dụng biến instance ở Declaration.
+
+ 
+
+1.4. Directive <%@ ... %>
+Định nghĩa: Là thẻ chỉ thị cấu hình cho toàn bộ trang JSP. Directive không sinh ra nội dung HTML trực tiếp, mà ra lệnh cho JSP Engine biết phải xử lý trang này như thế nào. Có 3 loại Directive:
+
+a) Page Directive <%@ page ... %>
+Cấu hình thông tin tổng quát cho trang JSP.
+
+<%@ page
+    contentType="text/html;charset=UTF-8"
+    language="java"
+    import="java.util.List, java.util.ArrayList"
+    errorPage="/WEB-INF/views/error.jsp"
+    isErrorPage="false"
+%>
+
+Thuộc tính
+
+Ý nghĩa
+
+contentType
+
+Định dạng nội dung và bảng mã (UTF-8)
+
+language
+
+Ngôn ngữ script sử dụng (mặc định: java)
+
+import
+
+Import thêm thư viện Java cần dùng
+
+errorPage
+
+Chỉ trang JSP xử lý lỗi khi trang này gặp lỗi
+
+isErrorPage
+
+Đánh dấu đây là trang xử lý lỗi hay không
+
+ 
+
+b) Include Directive <%@ include ... %>
+Nhúng nội dung của một file khác vào tại vị trí khai báo, xảy ra tại thời điểm biên dịch (compile-time). Nội dung file được nhúng trở thành một phần của Servlet được sinh ra.
+
+<%@ include file="/WEB-INF/views/common/header.jsp" %>
+
+<div class="main-content">
+    <h1>Trang chính</h1>
+</div>
+
+<%@ include file="/WEB-INF/views/common/footer.jsp" %>
+
+ 
+
+c) Taglib Directive <%@ taglib ... %>
+Khai báo sử dụng thư viện thẻ mở rộng (JSTL). Đây là cú pháp bắt buộc phải có trước khi dùng bất kỳ thẻ <c:...>, <fmt:...> nào.
+
+<%-- Cho dự án dùng Tomcat 10+ (Jakarta EE — phù hợp với cấu hình pom.xml ở Lesson 01) --%>
+<%@ taglib prefix="c"   uri="jakarta.tags.core" %>
+<%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
+<%@ taglib prefix="fn"  uri="jakarta.tags.functions" %>
+
+Ghi chú tương thích phiên bản: - Tomcat 10+ (Jakarta EE) — dùng URI: jakarta.tags.core - Tomcat 9 trở xuống (Java EE cũ) — dùng URI: http://java.sun.com/jsp/jstl/core
+
+Dự án trong module này dùng Spring 6.x + Jakarta Servlet 6.0.0 nên phải dùng URI của Jakarta EE.
+
+ 
+
+1.5. Comment (Ghi chú) <%-- ... --%>
+Định nghĩa: Là cú pháp viết chú thích riêng của JSP. Khác với comment HTML <!-- -->, comment JSP sẽ bị JSP Engine cắt bỏ hoàn toàn trước khi gửi trả về trình duyệt — người dùng không thể thấy dù “View Page Source”.
+
+Cú pháp:
+
+<%-- Đây là comment JSP — người dùng không thể thấy nội dung này --%>
+
+<!-- Đây là comment HTML — người dùng VẪN thấy khi View Source -->
+
+Ví dụ thực tế:
+
+<%--
+    Tên trang: DashBoard - Khu vực hiển thị điểm sinh viên
+    Tác giả: Nguyễn Văn A
+    Ngày tạo: 01/04/2026
+--%>
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<body>
+    <%-- Khối này chỉ hiển thị khi sinh viên đã đăng nhập --%>
+    <h1>Bảng điểm của: <%= request.getAttribute("username") %></h1>
+</body>
+</html>
+
+ 
+
+1.6. Expression Language (EL) ${ ... }
+Định nghĩa: Là cú pháp đọc dữ liệu thế hệ mới, hiện đại và an toàn hơn so với Scriptlet Expression <%= %>. EL cho phép truy xuất Attribute trong các Scope (Page, Request, Session, Application) một cách cực kỳ gọn gàng mà không cần ép kiểu hay try-catch.
+
+Cú pháp:
+
+${tên_biến}
+${đối_tượng.thuộc_tính}
+${map["key"]}
+
+Ví dụ — So sánh Scriptlet Expression vs EL:
+
+<%-- Cách cũ: Dùng Scriptlet Expression — dài và dễ lỗi --%>
+<p>Tên: <%= ((com.demo.model.Student) request.getAttribute("student")).getFullName() %></p>
+
+<%-- Cách mới: Dùng EL — ngắn gọn, tự động tìm trong các Scope --%>
+<p>Tên: ${student.fullName}</p>
+<p>Điểm: ${student.score}</p>
+<p>Tên đăng nhập: ${sessionScope.loggedInUser}</p>
+
+Thứ tự tìm kiếm tự động của EL:
+
+Khi viết ${tenBien} (không chỉ định scope), EL sẽ tự tìm kiếm theo thứ tự từ phạm vi nhỏ nhất đến lớn nhất:
+
+Thứ tự
+
+Scope
+
+Cách truy xuất tường minh
+
+Mô tả
+
+1 (nhỏ nhất)
+
+Page Scope
+
+${pageScope.tenBien}
+
+Dữ liệu chỉ tồn tại trong 1 trang JSP hiện tại
+
+2
+
+Request Scope
+
+${requestScope.tenBien}
+
+Dữ liệu chỉ tồn tại trong 1 Request
+
+3
+
+Session Scope
+
+${sessionScope.tenBien}
+
+Dữ liệu tồn tại trong cả phiên làm việc
+
+4 (lớn nhất)
+
+Application Scope
+
+${applicationScope.tenBien}
+
+Dữ liệu tồn tại suốt vòng đời ứng dụng
+
+Tự động
+
+Tự động tìm kiếm
+
+${tenBien}
+
+EL tự tìm từ nhỏ đến lớn: Page → Request → Session → Application
+
+Lưu ý: Nếu không chỉ định scope tường minh, EL sẽ trả về kết quả ở scope nhỏ nhất có chứa tên biến đó. Vì vậy, khi cần chắc chắn, hãy dùng scope tường minh như ${requestScope.x}, ${sessionScope.x}.
+
+ 
+
+2. Tổng kết & Lưu ý
+Bảng tổng hợp so sánh các loại cú pháp JSP
+Loại cú pháp
+
+Ký hiệu
+
+Mục đích chính
+
+Số lần thực thi
+
+Scriptlet
+
+<% %>
+
+Nhúng câu lệnh Java
+
+Mỗi Request
+
+Expression
+
+<%= %>
+
+In giá trị biến/biểu thức ra HTML
+
+Mỗi Request
+
+Declaration
+
+<%! %>
+
+Khai báo biến/phương thức cấp class Servlet
+
+1 lần khi khởi tạo
+
+Page Directive
+
+<%@ page %>
+
+Cấu hình tổng quát cho trang JSP
+
+Lúc biên dịch
+
+Include Directive
+
+<%@ include %>
+
+Nhúng nội dung file khác
+
+Lúc biên dịch
+
+Taglib Directive
+
+<%@ taglib %>
+
+Khai báo thư viện thẻ (JSTL)
+
+Lúc biên dịch
+
+Comment JSP
+
+<%-- --%>
+
+Ghi chú (ẩn hoàn toàn với browser)
+
+Không thực thi
+
+Expression Language
+
+${ }
+
+Truy xuất dữ liệu từ Scope
+
+Mỗi Request
+
+ 
+
+Bảng so sánh: Scriptlet Expression vs Expression Language (EL)
+Tiêu chí
+
+Scriptlet Expression <%= %>
+
+Expression Language ${}
+
+Độ dài code
+
+Dài, phải ép kiểu
+
+Ngắn gọn, tự động
+
+Xử lý null
+
+Ném NullPointerException
+
+Trả về chuỗi rỗng, an toàn
+
+Phạm vi truy xuất
+
+Chỉ request hiện tại (phải ép kiểu thủ công)
+
+Tự tìm qua tất cả Scope (Page → Request → Session → Application)
+
+Phòng chống XSS
+
+Không tự động
+
+An toàn hơn khi dùng <c:out> (học ở Lesson 05)
+
+Được khuyến nghị?
+
+Hạn chế dùng
+
+Ưu tiên sử dụng
+
+ 
+
+Giới thiệu ngắn về JSTL (học chi tiết ở Lesson 05)
+Bên cạnh EL ${}, JSP còn hỗ trợ một bộ thư viện thẻ mạnh mẽ là JSTL (JSP Standard Tag Library) — cho phép thực hiện vòng lặp, điều kiện, định dạng dữ liệu bằng thẻ XML thân thiện thay vì phải viết Scriptlet Java.
+
+Ví dụ so sánh nhanh:
+
+<%-- Cách cũ (Scriptlet) — khó đọc, dễ vi phạm MVC --%>
+<% for (String item : list) { %>
+    <li><%= item %></li>
+<% } %>
+
+<%-- Cách mới (JSTL) — gọn gàng, thân thiện với Frontend --%>
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<c:forEach items="${list}" var="item">
+    <li>${item}</li>
+</c:forEach>
+
+Toàn bộ các thẻ JSTL (Core, Formatting, Functions) sẽ được học chi tiết tại Lesson 05.
+
+ 
+
+Nguyên tắc vàng khi viết JSP trong Spring MVC thuần
+Ưu tiên EL ${} hơn Scriptlet <%= %> khi in giá trị.
+Ưu tiên JSTL <c:...> hơn Scriptlet <% %> khi cần vòng lặp hay điều kiện.
+Tuyệt đối không viết logic nghiệp vụ (gọi Database, tính toán phức tạp) trong JSP. Đó là việc của @Controller và @Service.
+File JSP phải được đặt trong /WEB-INF/views/ để bảo vệ khỏi truy cập URL trực tiếp.
+Luôn khai báo <%@ page contentType="text/html;charset=UTF-8" %> ở dòng đầu tiên để hiển thị tiếng Việt đúng cách.
+
+
+Lesson 04: Đối tượng Ẩn trong JSP (JSP Implicit Objects)
+Mục tiêu bài học: Sau bài này, sinh viên hiểu rõ 9 đối tượng ẩn (Implicit Objects) của JSP là gì, biết phân loại theo nhóm chức năng, biết vận dụng đúng từng đối tượng trong ngữ cảnh Spring MVC thuần mà không cần khai báo thủ công.
+
+ 
+
+1. Đặt vấn đề
+Hãy cùng nhìn lại một đoạn code Scriptlet JSP quen thuộc:
+
+<%
+    String tenNguoiDung = (String) request.getAttribute("username");
+    String dienChi = request.getParameter("email");
+    out.println("<p>Xin chào: " + tenNguoiDung + "</p>");
+%>
+
+Bạn có nhận ra điều kỳ lạ chưa? Trong đoạn code trên, request và out được dùng thản nhiên như thể chúng đã tồn tại sẵn từ trước, mà không hề có một dòng khai báo hay khởi tạo nào (new, =, …) trước đó cả.
+
+Trong code Java thông thường, dùng một biến chưa khai báo thì IDE sẽ lập tức báo lỗi Cannot resolve symbol. Thế nhưng trong JSP, những cái tên như request, response, session, out… lại hoạt động hoàn toàn bình thường. Tại sao vậy?
+
+Câu trả lời nằm ở cơ chế đặc biệt của JSP Engine. Nhớ lại từ Lesson 02: Khi một file .jsp được biên dịch, JSP Engine sẽ tự động tạo ra phương thức _jspService(HttpServletRequest request, HttpServletResponse response). Và chính bên trong phương thức này, JSP Engine đã âm thầm khởi tạo sẵn một loạt các đối tượng tiện ích và đặt chúng vào tầm tay của lập trình viên mà không cần khai báo thêm. Đó chính là Đối tượng Ẩn (Implicit Objects).
+
+ 
+
+2. Đối tượng Ẩn trong JSP là gì?
+Đối tượng Ẩn (Implicit Objects) là tập hợp các đối tượng Java được JSP Engine tự động khởi tạo và cung cấp sẵn bên trong mọi Scriptlet <% %> và Expression <%= %> của bất kỳ trang JSP nào. Lập trình viên có thể sử dụng chúng ngay lập tức mà không cần dòng khai báo.
+
+JSP cung cấp 9 đối tượng ẩn chuẩn, được phân chia thành 4 nhóm chức năng:
+
+Nhóm
+
+Đối tượng
+
+Tính năng nổi bật
+
+Vào/Ra
+
+request, response, out
+
+Giao tiếp HTTP, in nội dung
+
+Phạm vi
+
+session, application, pageContext
+
+Lưu trữ trạng thái xuyên request
+
+Cấu hình
+
+config
+
+Đọc tham số khởi tạo từ web.xml
+
+Thông tin
+
+page, exception
+
+Tham chiếu bản thân & bắt lỗi
+
+ 
+
+2.1. Đối tượng request (HttpServletRequest)
+Định nghĩa: Đại diện cho yêu cầu HTTP (HTTP Request) đến từ phía trình duyệt Client. Nó chứa toàn bộ thông tin liên quan đến lần truy cập của người dùng: các tham số form, đường dẫn URL, cookie, header, và các attribute được Controller Spring gửi sang.
+
+Phạm vi tồn tại: Chỉ trong một lần Request (kết thúc khi trả Response xong).
+
+Các phương thức hay dùng:
+
+Phương thức
+
+Mục đích
+
+request.getAttribute("key")
+
+Lấy dữ liệu từ Controller Spring gửi sang qua model.addAttribute()
+
+request.getParameter("key")
+
+Lấy giá trị tham số từ URL ?key=value hoặc từ form HTML
+
+request.getSession()
+
+Lấy đối tượng Session hiện tại của người dùng
+
+request.getContextPath()
+
+Lấy đường dẫn gốc của ứng dụng (context path)
+
+request.getMethod()
+
+Lấy phương thức HTTP ("GET" hoặc "POST")
+
+request.getRemoteAddr()
+
+Lấy địa chỉ IP của máy Client
+
+Ví dụ thực tế trong Spring MVC thuần:
+
+Phía Controller gửi dữ liệu:
+
+// StudentController.java
+@Controller
+public class StudentController {
+
+    @GetMapping("/student/profile")
+    public String viewProfile(HttpServletRequest request) {
+        Student sv = new Student("Nguyễn Văn A", 88);
+        request.setAttribute("student", sv);       // Gửi object sang JSP
+        request.setAttribute("pageTitle", "Hồ sơ sinh viên");
+        return "student/profile"; // Chiếu sang /WEB-INF/views/student/profile.jsp
+    }
+}
+
+Phía JSP nhận dữ liệu qua request:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<html>
+<head>
+    <title>${requestScope.pageTitle}</title>
+</head>
+<body>
+    <%-- Cách 1: Dùng Scriptlet với đối tượng ẩn request --%>
+    <%
+        Student sv = (Student) request.getAttribute("student");
+        String method = request.getMethod();   // "GET"
+        String ipClient = request.getRemoteAddr();
+    %>
+    <p>Phương thức: <%= method %></p>
+    <p>IP Client: <%= ipClient %></p>
+
+    <%-- Cách 2 (Ưu tiên): Dùng EL — ngắn gọn hơn --%>
+    <h2>Tên: ${student.fullName}</h2>
+    <h2>Điểm: ${student.score}</h2>
+
+    <%-- Lấy tham số URL: /student/profile?tab=grade --%>
+    <%
+        String currentTab = request.getParameter("tab"); // = "grade"
+    %>
+</body>
+</html>
+
+ 
+
+2.2. Đối tượng response (HttpServletResponse)
+Định nghĩa: Đại diện cho phản hồi HTTP (HTTP Response) mà Server sẽ gửi trả lại cho trình duyệt. Dùng để thiết lập header, kiểu nội dung, hoặc chuyển hướng trang.
+
+Phạm vi tồn tại: Gắn liền với một chu kỳ Request–Response duy nhất.
+
+Các phương thức hay dùng:
+
+Phương thức
+
+Mục đích
+
+response.sendRedirect("/url")
+
+Chuyển hướng trình duyệt sang URL khác (HTTP 302)
+
+response.setContentType("text/html")
+
+Thiết lập kiểu nội dung trả về
+
+response.setHeader("key", "value")
+
+Thiết lập HTTP Header cho Response
+
+response.getWriter()
+
+Lấy luồng ghi để in nội dung trực tiếp
+
+Lưu ý thực chiến — Spring MVC: Trong dự án Spring MVC thuần, không nên dùng response.sendRedirect() trực tiếp trong JSP. Việc điều hướng (redirect/forward) nên được thực hiện ở tầng Controller bằng cách return "redirect:/url", hoặc ở tầng Interceptor (HandlerInterceptor) khi cần kiểm tra quyền truy cập. JSP chỉ chịu trách nhiệm hiển thị — không phải điều hướng.
+
+Mục đích nêu về response trong JSP: Hiểu response giúp sinh viên nắm được bản chất HTTP Response hoạt động như thế nào ở tầng nền, phục vụ cho việc hiểu các cơ chế redirect/header của Spring MVC ở tầng Controller.
+
+ 
+
+2.3. Đối tượng out (JspWriter)
+Định nghĩa: Là luồng ghi (output stream) dùng để in nội dung HTML trực tiếp ra trang. Đây là phiên bản đặc biệt của PrintWriter được tối ưu cho JSP (có bộ đệm — buffer).
+
+Phạm vi tồn tại: Chỉ trong một lần Request.
+
+Các phương thức hay dùng:
+
+Phương thức
+
+Mục đích
+
+out.println("nội dung")
+
+In nội dung và xuống dòng
+
+out.print("nội dung")
+
+In nội dung không xuống dòng
+
+out.flush()
+
+Đẩy toàn bộ nội dung trong buffer ra trình duyệt ngay
+
+out.close()
+
+Đóng luồng ghi
+
+Ví dụ:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<body>
+<%
+    out.println("<h1>Đây là tiêu đề được in qua đối tượng 'out'</h1>");
+
+    for (int i = 1; i <= 5; i++) {
+        out.println("<p>Dòng số " + i + "</p>");
+    }
+%>
+
+<%-- Thực ra, viết HTML trực tiếp bên ngoài thẻ JSP cũng dùng 'out' ngầm định --%>
+<p>Dòng này cũng được ghi vào 'out' phía sau hậu trường</p>
+</body>
+</html>
+
+ 
+
+2.4. Đối tượng session (HttpSession)
+Định nghĩa: Đại diện cho phiên làm việc (Session) của một người dùng cụ thể với ứng dụng web. Session cho phép lưu trữ thông tin người dùng xuyên suốt nhiều Request, giúp “nhớ” người dùng là ai mà không cần yêu cầu đăng nhập lại mỗi lần.
+
+Phạm vi tồn tại: Từ lúc người dùng bắt đầu phiên truy cập cho đến khi đăng xuất hoặc hết thời gian chờ (timeout).
+
+Các phương thức hay dùng:
+
+Phương thức
+
+Mục đích
+
+session.setAttribute("key", value)
+
+Lưu dữ liệu vào session
+
+session.getAttribute("key")
+
+Lấy dữ liệu đã lưu từ session
+
+session.removeAttribute("key")
+
+Xóa một attribute khỏi session
+
+session.invalidate()
+
+Hủy toàn bộ session (dùng khi đăng xuất)
+
+session.getId()
+
+Lấy mã định danh duy nhất của session
+
+session.getMaxInactiveInterval()
+
+Lấy thời gian timeout (giây)
+
+Ví dụ thực tế — Luồng đăng nhập trong Spring MVC thuần:
+
+Controller xử lý đăng nhập (lưu vào session tại tầng Controller):
+
+// AuthController.java
+@Controller
+public class AuthController {
+
+    @PostMapping("/login")
+    public String processLogin(@RequestParam String username,
+                               @RequestParam String password,
+                               HttpSession session) {
+        if ("admin".equals(username) && "12345".equals(password)) {
+            session.setAttribute("loggedUser", username); // Lưu vào Session
+            session.setAttribute("role", "ADMIN");
+            return "redirect:/dashboard";
+        }
+        return "login"; // Quay lại trang login nếu sai
+    }
+
+    @GetMapping("/logout")
+    public String logout(HttpSession session) {
+        session.invalidate(); // Xóa toàn bộ session khi đăng xuất
+        return "redirect:/login";
+    }
+}
+
+JSP sử dụng session (thông qua EL — cách ưu tiên):
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<html>
+<body>
+    <%-- Ưu tiên dùng EL với sessionScope --%>
+    <c:choose>
+        <c:when test="${not empty sessionScope.loggedUser}">
+            <p>Xin chào, <strong>${sessionScope.loggedUser}</strong>! Vai trò: ${sessionScope.role}</p>
+            <a href="${pageContext.request.contextPath}/logout">Đăng xuất</a>
+        </c:when>
+        <c:otherwise>
+            <p>Bạn chưa đăng nhập. <a href="/login">Đăng nhập ngay</a></p>
+        </c:otherwise>
+    </c:choose>
+</body>
+</html>
+
+ 
+
+2.5. Đối tượng application (ServletContext)
+Định nghĩa: Đại diện cho ngữ cảnh của toàn bộ ứng dụng web. Dữ liệu lưu trong application được chia sẻ giữa tất cả người dùng và tất cả trang JSP trong cùng dự án, tồn tại cho đến khi server bị tắt.
+
+Phạm vi tồn tại: Suốt toàn bộ thời gian chạy của ứng dụng.
+
+Các phương thức hay dùng:
+
+Phương thức
+
+Mục đích
+
+application.setAttribute("key", value)
+
+Lưu dữ liệu toàn cục chia sẻ cho mọi người dùng
+
+application.getAttribute("key")
+
+Lấy dữ liệu toàn cục
+
+application.getInitParameter("key")
+
+Đọc tham số cấu hình trong web.xml
+
+application.getRealPath("/")
+
+Lấy đường dẫn vật lý thực tế trên hệ thống file
+
+application.log("message")
+
+Ghi log vào file log của máy chủ
+
+Ví dụ thực tế — Bộ đếm lượt truy cập toàn site:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<body>
+<%
+    // Lấy biến đếm từ Application Scope (dùng chung cho MỌI người dùng)
+    Integer visitCount = (Integer) application.getAttribute("visitCount");
+    if (visitCount == null) {
+        visitCount = 0;
+    }
+    visitCount++;
+    // Lưu lại vào Application Scope — cập nhật cho tất cả người dùng
+    application.setAttribute("visitCount", visitCount);
+%>
+<p>Tổng lượt truy cập toàn trang web: <strong><%= visitCount %></strong> lần</p>
+
+<%-- Hoặc dùng EL với scope tường minh --%>
+<p>Lượt truy cập (EL): <strong>${applicationScope.visitCount}</strong></p>
+</body>
+</html>
+
+ 
+
+2.6. Đối tượng pageContext (PageContext)
+Định nghĩa: Là đối tượng “đa năng” nhất, đóng vai trò là trung tâm điều phối cho toàn bộ ngữ cảnh của trang JSP hiện tại. Từ pageContext, bạn có thể truy xuất tất cả các đối tượng ẩn còn lại (request, response, session, application, out,…).
+
+Phạm vi tồn tại: Chỉ trong một trang JSP duy nhất đang hiển thị.
+
+Các phương thức hay dùng:
+
+Phương thức
+
+Mục đích
+
+pageContext.getRequest()
+
+Lấy đối tượng request
+
+pageContext.getSession()
+
+Lấy đối tượng session
+
+pageContext.getServletContext()
+
+Lấy đối tượng application
+
+pageContext.getAttribute("key", SCOPE)
+
+Lấy attribute từ scope chỉ định
+
+pageContext.setAttribute("key", value, SCOPE)
+
+Đặt attribute vào scope chỉ định
+
+Các hằng số Scope trong pageContext:
+
+Hằng số
+
+Phạm vi
+
+PageContext.PAGE_SCOPE
+
+Phạm vi trang (page)
+
+PageContext.REQUEST_SCOPE
+
+Phạm vi request
+
+PageContext.SESSION_SCOPE
+
+Phạm vi session
+
+PageContext.APPLICATION_SCOPE
+
+Phạm vi application
+
+Lưu ý thực chiến — Spring MVC: Phương thức pageContext.forward("/url") và pageContext.include("/url") có thể được dùng để chuyển tiếp, nhưng trong Spring MVC thuần đây là anti-pattern. Việc forward/include nên để ViewResolver và Controller xử lý, không nên gọi trực tiếp từ trong trang JSP.
+
+Ví dụ — Cách dùng pageContext phổ biến nhất với EL:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<body>
+<%
+    // Đặt biến vào Page Scope (chỉ tồn tại trong trang JSP này)
+    pageContext.setAttribute("greeting", "Xin chào từ pageContext!");
+
+    // Lấy về bằng scope tường minh
+    String msg = (String) pageContext.getAttribute("greeting", PageContext.PAGE_SCOPE);
+    out.println("<p>" + msg + "</p>");
+%>
+
+<%-- Trong EL, dùng pageScope để truy xuất --%>
+<p>${pageScope.greeting}</p>
+
+<%-- pageContext.request được dùng nhiều nhất trong EL — xây dựng đường dẫn động --%>
+<p>Context Path: ${pageContext.request.contextPath}</p>
+</body>
+</html>
+
+ 
+
+2.7. Đối tượng config (ServletConfig)
+Định nghĩa: Cung cấp thông tin cấu hình khởi tạo của Servlet tương ứng với trang JSP (chính là nội dung cấu hình trong web.xml). Ít được dùng trực tiếp trong code JSP thông thường.
+
+Các phương thức hay dùng:
+
+Phương thức
+
+Mục đích
+
+config.getServletName()
+
+Lấy tên của Servlet (hoặc JSP)
+
+config.getInitParameter("key")
+
+Đọc tham số khởi tạo cấu hình trong web.xml
+
+config.getServletContext()
+
+Lấy đối tượng application (ServletContext)
+
+Ví dụ:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<body>
+<p>Tên Servlet JSP: <%= config.getServletName() %></p>
+
+<%-- Đọc tham số được cấu hình sẵn trong web.xml --%>
+<%
+    String adminEmail = config.getInitParameter("adminEmail");
+%>
+<p>Email quản trị: <%= adminEmail %></p>
+</body>
+</html>
+
+ 
+
+2.8. Đối tượng page (Object / this)
+Định nghĩa: Đây chính là tham chiếu đến chính đối tượng Servlet đang xử lý trang JSP hiện tại — tương đương với từ khóa this trong phương thức _jspService(). Kiểu dữ liệu của page là Object (không phải kiểu Servlet cụ thể). Trong thực tế lập trình JSP hằng ngày, đối tượng page gần như không bao giờ được dùng trực tiếp.
+
+Ví dụ:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<html>
+<body>
+    <%-- Lấy tên class của Servlet được JSP Engine sinh ra --%>
+    <p>Class xử lý trang này: <%= page.getClass().getName() %></p>
+</body>
+</html>
+
+ 
+
+2.9. Đối tượng exception (Throwable)
+Định nghĩa: Chứa thông tin về lỗi/ngoại lệ xảy ra ở trang JSP khác, được tự động truyền sang trang xử lý lỗi. Đối tượng exception chỉ khả dụng trên những trang được đánh dấu là trang xử lý lỗi với directive <%@ page isErrorPage="true" %>.
+
+Các phương thức hay dùng:
+
+Phương thức
+
+Mục đích
+
+exception.getMessage()
+
+Lấy thông điệp mô tả lỗi
+
+exception.getClass().getName()
+
+Lấy tên loại lỗi
+
+exception.printStackTrace()
+
+In toàn bộ stack trace ra console máy chủ
+
+Ví dụ — Thiết lập trang xử lý lỗi:
+
+Trang product.jsp — khai báo trang lỗi khi có exception:
+
+<%@ page contentType="text/html;charset=UTF-8" errorPage="/WEB-INF/views/error.jsp" %>
+<html>
+<body>
+<%
+    // Giả lập lỗi xảy ra
+    int[] arr = new int[5];
+    int x = arr[10]; // Lỗi ArrayIndexOutOfBoundsException
+%>
+</body>
+</html>
+
+Trang error.jsp — nhận exception và hiển thị thân thiện:
+
+<%@ page contentType="text/html;charset=UTF-8" isErrorPage="true" %>
+<html>
+<body>
+<h2>Hệ thống gặp sự cố!</h2>
+<p><strong>Loại lỗi:</strong> <%= exception.getClass().getName() %></p>
+<p><strong>Mô tả:</strong> <%= exception.getMessage() %></p>
+
+<%-- Trong môi trường production: KHÔNG bao giờ hiển thị chi tiết lỗi ra màn hình người dùng! --%>
+<%-- Chỉ ghi log và hiển thị thông báo thân thiện cho người dùng --%>
+</body>
+</html>
+
+Lưu ý thực chiến — Spring MVC: Trong dự án Spring MVC thuần, việc xử lý lỗi toàn cục nên được giao cho annotation @ControllerAdvice kết hợp @ExceptionHandler. Dùng exception trong JSP chỉ phù hợp khi chưa có cơ chế xử lý lỗi tập trung.
+
+ 
+
+3. Tổng kết & Lưu ý
+Bảng so sánh 9 Đối tượng Ẩn
+Đối tượng
+
+Kiểu dữ liệu
+
+Phạm vi
+
+Mục đích chính
+
+request
+
+HttpServletRequest
+
+Request
+
+Nhận dữ liệu từ Client và từ Controller
+
+response
+
+HttpServletResponse
+
+Request
+
+Điều khiển HTTP Response (biết bản chất; điều hướng nên để Controller làm)
+
+out
+
+JspWriter
+
+Request
+
+In nội dung ra trang HTML
+
+session
+
+HttpSession
+
+Session
+
+Lưu trữ trạng thái người dùng xuyên request
+
+application
+
+ServletContext
+
+Application
+
+Lưu trữ dữ liệu toàn cục cho mọi người dùng
+
+pageContext
+
+PageContext
+
+Page
+
+Truy xuất tất cả đối tượng ẩn khác, quản lý scope
+
+config
+
+ServletConfig
+
+Page
+
+Đọc cấu hình khởi tạo từ web.xml
+
+page
+
+Object (this)
+
+Page
+
+Tham chiếu bản thân Servlet JSP
+
+exception
+
+Throwable
+
+Page
+
+Bắt lỗi trên trang xử lý lỗi (isErrorPage="true")
+
+ 
+
+Bảng so sánh Phạm vi lưu trữ (Scope) theo thứ tự từ nhỏ tới lớn
+Scope
+
+Đối tượng
+
+Thời gian sống
+
+Phạm vi chia sẻ
+
+Page
+
+pageContext
+
+Trong 1 trang JSP
+
+Chỉ trang JSP hiện tại
+
+Request
+
+request
+
+Trong 1 Request
+
+Trang JSP + tất cả forward/include từ request đó
+
+Session
+
+session
+
+Trong 1 phiên người dùng
+
+Tất cả trang JSP của 1 người dùng
+
+Application
+
+application
+
+Suốt vòng đời ứng dụng
+
+Tất cả mọi người dùng, mọi trang JSP
+
+ 
+
+Lưu ý thực chiến trong Spring MVC thuần
+request và session là 2 đối tượng bạn sẽ dùng nhiều nhất khi làm việc với Spring MVC.
+Ưu tiên EL ${requestScope.x}, ${sessionScope.x} thay vì gọi trực tiếp request.getAttribute() hay session.getAttribute() trong Scriptlet.
+Cẩn trọng với application Scope: Vì nó chia sẻ dữ liệu cho tất cả người dùng, việc ghi không đúng có thể gây ra lỗi tranh chấp dữ liệu (race condition) trong môi trường nhiều người dùng đồng thời.
+Không dùng response.sendRedirect() trong JSP. Việc điều hướng nên giao cho return "redirect:/url" ở tầng Controller.
+Đối tượng exception chỉ hoạt động khi có isErrorPage="true". Quên đặt directive này sẽ khiến code biên dịch bị lỗi.
+
+
+Lesson 05: Bộ Thư viện Thẻ Chuẩn JSTL (JSP Standard Tag Library)
+Mục tiêu bài học: Sau bài này, sinh viên hiểu JSTL là gì, biết phân biệt các nhóm thư viện, thành thạo các thẻ hay dùng nhất trong nhóm Core và Format, đồng thời vận dụng đúng cách trong mô hình Spring MVC thuần.
+
+ 
+
+ 
+
+1. Đặt vấn đề
+Hãy nhìn vào đoạn code JSP sau và tìm ra điểm bất ổn:
+
+<%@ page contentType="text/html;charset=UTF-8" language="java" import="java.util.List" %>
+<html>
+<body>
+<table>
+<%
+    List<String> products = (List<String>) request.getAttribute("products");
+    if (products != null && !products.isEmpty()) {
+        for (int i = 0; i < products.size(); i++) {
+            String p = products.get(i);
+            if (p != null) {
+%>
+    <tr><td><%= i + 1 %></td><td><%= p %></td></tr>
+<%
+            }
+        }
+    } else {
+%>
+    <tr><td colspan="2">Không có sản phẩm nào</td></tr>
+<%
+    }
+%>
+</table>
+</body>
+</html>
+
+Đoạn code trên hoạt động được — nhưng bộc lộ rất nhiều vấn đề:
+
+Cực kỳ khó đọc: Các thẻ mở đóng <% và %> xen lẫn với HTML tạo ra mã nguồn hỗn độn, khó bảo trì.
+Nhà thiết kế Frontend không thể hiểu: Người chỉ biết HTML/CSS không thể chỉnh sửa giao diện mà không phá vỡ logic Java.
+Hỗn tạp Presentation và Logic nhỏ: JSP đang ôm cả việc duyệt vòng lặp, kiểm tra null bằng Java thuần — trong khi cách làm này hoàn toàn có thể thay thế bằng thẻ XML thân thiện hơn mà không đẩy gánh nặng lên Controller.
+Dễ gây lỗi XSS: Dùng <%= %> in thẳng không qua mã hóa ký tự đặc biệt.
+Để giải quyết triệt để những vấn đề trên, cộng đồng Java đã chuẩn hóa một bộ thư viện thẻ đặc biệt có tên là JSTL. Sau khi áp dụng JSTL, đoạn code trên trở thành:
+
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<table>
+    <c:choose>
+        <c:when test="${not empty products}">
+            <c:forEach items="${products}" var="p" varStatus="loop">
+                <tr><td>${loop.count}</td><td><c:out value="${p}"/></td></tr>
+            </c:forEach>
+        </c:when>
+        <c:otherwise>
+            <tr><td colspan="2">Không có sản phẩm nào</td></tr>
+        </c:otherwise>
+    </c:choose>
+</table>
+
+Gọn gàng, dễ đọc, an toàn — đó chính là sức mạnh của JSTL.
+
+ 
+
+ 
+
+2. Bộ Thư viện Thẻ Chuẩn JSTL
+2.1. JSTL là gì?
+JSTL (JSP Standard Tag Library) là tập hợp các thẻ HTML tùy chỉnh được Sun Microsystems (nay là Oracle) chuẩn hóa, cung cấp các chức năng phổ biến nhất trong lập trình web (vòng lặp, điều kiện, định dạng số/ngày, xử lý URL,…) dưới dạng thẻ XML quen thuộc thay vì code Java thuần.
+
+JSTL được chia thành 5 nhóm thư viện (Tag Libraries) chính:
+
+Nhóm
+
+Tiền tố (Prefix)
+
+URI (Jakarta EE — Tomcat 10+)
+
+URI (Java EE cũ — Tomcat 9-)
+
+Chức năng
+
+Core
+
+c
+
+jakarta.tags.core
+
+http://java.sun.com/jsp/jstl/core
+
+Logic cơ bản: vòng lặp, điều kiện, biến, URL
+
+Formatting
+
+fmt
+
+jakarta.tags.fmt
+
+http://java.sun.com/jsp/jstl/fmt
+
+Định dạng số, tiền tệ, ngày giờ, quốc tế hóa
+
+SQL
+
+sql
+
+jakarta.tags.sql
+
+http://java.sun.com/jsp/jstl/sql
+
+Truy vấn Database (KHÔNG dùng trong Spring MVC)
+
+XML
+
+x
+
+jakarta.tags.xml
+
+http://java.sun.com/jsp/jstl/xml
+
+Xử lý và biến đổi tài liệu XML
+
+Functions
+
+fn
+
+jakarta.tags.functions
+
+http://java.sun.com/jsp/jstl/functions
+
+Hàm tiện ích xử lý chuỗi, mảng
+
+Lưu ý về phiên bản: Dự án trong module này dùng Spring 6.x + Jakarta Servlet 6.0.0 (Tomcat 10+), vì vậy phải dùng URI theo Jakarta EE (cột thứ 3 bảng trên). Nếu dùng Tomcat 9 trở xuống (Java EE cũ), dùng URI ở cột thứ 4.
+
+Lưu ý về phạm vi sử dụng: Trong mô hình Spring MVC thuần, chỉ sử dụng nhóm Core (c), Formatting (fmt) và Functions (fn) là chủ yếu. Nhóm SQL tuyệt đối không được dùng trong View — mọi thao tác Database phải nằm ở tầng Repository/DAO.
+
+ 
+
+ 
+
+2.2. Cài đặt JSTL trong dự án Spring MVC thuần
+Đảm bảo pom.xml đã có cả API lẫn Implementation (đã được cấu hình đầy đủ tại Lesson 01):
+
+<!-- JSTL API -->
+<dependency>
+    <groupId>jakarta.servlet.jsp.jstl</groupId>
+    <artifactId>jakarta.servlet.jsp.jstl-api</artifactId>
+    <version>3.0.0</version>
+</dependency>
+
+<!-- JSTL Implementation — BẮT BUỘC có để chạy được thẻ JSTL lúc runtime -->
+<dependency>
+    <groupId>org.glassfish.web</groupId>
+    <artifactId>jakarta.servlet.jsp.jstl</artifactId>
+    <version>3.0.1</version>
+</dependency>
+
+ 
+
+ 
+
+2.3. Nhóm Core — Thư viện cốt lõi (Tiền tố: c)
+Khai báo sử dụng (đặt ở đầu file JSP):
+
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+
+ 
+
+ 
+
+🔹 <c:out> — In giá trị an toàn (chống XSS)
+In giá trị của một biến ra HTML, tự động mã hóa (escape) các ký tự đặc biệt như <, >, &, " để chống tấn công XSS (Cross-Site Scripting).
+
+Cú pháp:
+
+<c:out value="${biểu_thức}" default="Giá trị mặc định nếu null" escapeXml="true"/>
+
+Ví dụ:
+
+<%-- Nếu student.fullName = "<script>alert('hack')</script>" --%>
+
+<%-- Cách nguy hiểm (XSS): In thẳng --%>
+<p>${student.fullName}</p> <%-- Trình duyệt sẽ thực thi script! --%>
+
+<%-- Cách an toàn: qua c:out --%>
+<p><c:out value="${student.fullName}" default="Chưa có tên"/></p>
+<%-- Kết quả: &lt;script&gt;alert('hack')&lt;/script&gt; -- vô hại --%>
+
+ 
+
+ 
+
+🔹 <c:set> — Tạo và gán giá trị biến
+Tạo biến mới hoặc gán lại giá trị cho biến trong một Scope nhất định.
+
+Cú pháp:
+
+<%-- Tạo biến mới --%>
+<c:set var="tenBien" value="giá trị" scope="request|session|application|page"/>
+
+<%-- Gán giá trị vào thuộc tính của object --%>
+<c:set target="${object}" property="tenThuocTinh" value="giá trị mới"/>
+
+Ví dụ:
+
+<%-- Tạo biến 'discountRate' trong Request Scope --%>
+<c:set var="discountRate" value="0.15" scope="request"/>
+
+<%-- Tính giá sau giảm và lưu vào biến mới --%>
+<c:set var="finalPrice" value="${product.price * (1 - discountRate)}"/>
+
+<p>Giá gốc: ${product.price}</p>
+<p>Giá sau giảm 15%: ${finalPrice}</p>
+
+ 
+
+ 
+
+🔹 <c:remove> — Xóa biến khỏi Scope
+<c:remove var="tenBien" scope="session"/>
+
+ 
+
+ 
+
+🔹 <c:if> — Điều kiện đơn
+Hiển thị nội dung bên trong khi và chỉ khi điều kiện đúng. Không có thẻ else đi kèm — nếu cần xử lý nhiều nhánh, dùng <c:choose>.
+
+Cú pháp:
+
+<c:if test="${biểu_thức_điều_kiện}" var="ketQua" scope="page">
+    <%-- Nội dung hiển thị khi điều kiện đúng --%>
+</c:if>
+
+Ví dụ thực tế trong Spring MVC:
+
+<%-- Chỉ hiển thị nút "Sửa/Xóa" nếu người dùng có role ADMIN --%>
+<c:if test="${sessionScope.role == 'ADMIN'}">
+    <button class="btn-edit"> Sửa</button>
+    <button class="btn-delete"> Xóa</button>
+</c:if>
+
+<%-- Hiển thị cảnh báo nếu giỏ hàng trống --%>
+<c:if test="${empty cartItems}">
+    <div class="alert"> Giỏ hàng của bạn đang trống!</div>
+</c:if>
+
+<%-- Kiểm tra số lượng tồn kho --%>
+<c:if test="${product.stock == 0}">
+    <span class="badge-soldout">Hết hàng</span>
+</c:if>
+
+ 
+
+ 
+
+🔹 <c:choose>, <c:when>, <c:otherwise> — Điều kiện nhiều nhánh
+Tương đương cấu trúc if – else if – else hoặc switch – case trong Java.
+
+Cú pháp:
+
+<c:choose>
+    <c:when test="${điều_kiện_1}">
+        <%-- Nhánh 1 --%>
+    </c:when>
+    <c:when test="${điều_kiện_2}">
+        <%-- Nhánh 2 --%>
+    </c:when>
+    <c:otherwise>
+        <%-- Nhánh mặc định (khi không có điều kiện nào thỏa) --%>
+    </c:otherwise>
+</c:choose>
+
+Ví dụ — Hiển thị badge xếp loại điểm (thang điểm chuẩn):
+
+<c:choose>
+    <c:when test="${student.score >= 90}">
+        <span style="color: gold; font-weight: bold;"> Xuất sắc (A+)</span>
+    </c:when>
+    <c:when test="${student.score >= 80}">
+        <span style="color: green;"> Giỏi (A)</span>
+    </c:when>
+    <c:when test="${student.score >= 70}">
+        <span style="color: blue;"> Khá (B)</span>
+    </c:when>
+    <c:when test="${student.score >= 60}">
+        <span style="color: teal;"> Trung bình khá (C)</span>
+    </c:when>
+    <c:when test="${student.score >= 50}">
+        <span style="color: orange;"> Trung bình (D)</span>
+    </c:when>
+    <c:otherwise>
+        <span style="color: red;"> Yếu — Cần thi lại (F)</span>
+    </c:otherwise>
+</c:choose>
+
+ 
+
+ 
+
+🔹 <c:forEach> — Vòng lặp duyệt tập hợp
+Thẻ quan trọng nhất trong nhóm Core. Dùng để lặp qua mảng, List, Set, Map hoặc lặp theo phạm vi số.
+
+Cú pháp:
+
+<%-- Lặp qua tập hợp (Collection/Array) --%>
+<c:forEach items="${tập_hợp}" var="phần_tử" varStatus="trạng_thái"
+           begin="vị_trí_bắt_đầu" end="vị_trí_kết_thúc" step="bước_nhảy">
+    <%-- Nội dung lặp --%>
+</c:forEach>
+
+<%-- Lặp theo số (tương đương vòng for thông thường) --%>
+<c:forEach begin="1" end="10" var="i">
+    ${i}
+</c:forEach>
+
+Thuộc tính varStatus cung cấp thông tin vòng lặp:
+
+Thuộc tính
+
+Kiểu
+
+Mô tả
+
+loop.index
+
+int
+
+Chỉ số hiện tại (bắt đầu từ 0)
+
+loop.count
+
+int
+
+Thứ tự hiện tại (bắt đầu từ 1)
+
+loop.first
+
+boolean
+
+true nếu là phần tử đầu tiên
+
+loop.last
+
+boolean
+
+true nếu là phần tử cuối cùng
+
+loop.begin
+
+int
+
+Giá trị begin
+
+loop.end
+
+int
+
+Giá trị end
+
+Ví dụ hoàn chỉnh — Bảng danh sách sinh viên từ Spring MVC Controller:
+
+// StudentController.java
+@Controller
+public class StudentController {
+
+    @GetMapping("/students")
+    public String listStudents(Model model) {
+        List<Student> list = studentService.findAll();
+        model.addAttribute("studentList", list);
+        model.addAttribute("totalCount", list.size());
+        return "student/list"; // → /WEB-INF/views/student/list.jsp
+    }
+}
+
+<%-- /WEB-INF/views/student/list.jsp --%>
+<%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<html>
+<head><title>Danh sách Sinh viên</title></head>
+<body>
+<h2>Danh sách Sinh viên (${totalCount} sinh viên)</h2>
+
+<c:if test="${empty studentList}">
+    <p>Chưa có sinh viên nào trong hệ thống.</p>
+</c:if>
+
+<c:if test="${not empty studentList}">
+    <table border="1" cellpadding="8">
+        <thead>
+            <tr>
+                <th>STT</th>
+                <th>Họ tên</th>
+                <th>Điểm</th>
+                <th>Xếp loại</th>
+                <th>Thao tác</th>
+            </tr>
+        </thead>
+        <tbody>
+            <c:forEach items="${studentList}" var="sv" varStatus="loop">
+                <%-- Đổi màu xen kẽ dựa vào chỉ số chẵn/lẻ --%>
+                <tr style="${loop.index % 2 == 0 ? 'background:#f9f9f9' : ''}">
+                    <td>${loop.count}</td>
+                    <td><c:out value="${sv.fullName}"/></td>
+                    <td>${sv.score}</td>
+                    <td>
+                        <c:choose>
+                            <c:when test="${sv.score >= 90}">Xuất sắc</c:when>
+                            <c:when test="${sv.score >= 80}">Giỏi</c:when>
+                            <c:when test="${sv.score >= 70}">Khá</c:when>
+                            <c:when test="${sv.score >= 60}">Trung bình khá</c:when>
+                            <c:when test="${sv.score >= 50}">Trung bình</c:when>
+                            <c:otherwise>Yếu</c:otherwise>
+                        </c:choose>
+                    </td>
+                    <td>
+                        <a href="<c:url value='/students/${sv.id}/edit'/>">Sửa</a> |
+                        <a href="<c:url value='/students/${sv.id}/delete'/>">Xóa</a>
+                    </td>
+                </tr>
+            </c:forEach>
+        </tbody>
+    </table>
+</c:if>
+</body>
+</html>
+
+ 
+
+ 
+
+🔹 <c:forTokens> — Vòng lặp tách chuỗi
+Tách một chuỗi theo ký tự phân cách (delimiter) rồi lặp qua từng phần tử.
+
+<%-- Tách chuỗi "Hà Nội,Đà Nẵng,TP.HCM" theo dấu phẩy --%>
+<c:forTokens items="Hà Nội,Đà Nẵng,TP.HCM" delims="," var="city">
+    <li>${city}</li>
+</c:forTokens>
+
+ 
+
+ 
+
+🔹 <c:url> — Tạo URL chuẩn, tự động thêm Context Path
+Tự động thêm Context Path (đường dẫn gốc của ứng dụng) vào URL, tránh hardcode đường dẫn.
+
+<%-- Tạo URL với Context Path tự động --%>
+<a href="<c:url value='/students/list'/>">Xem danh sách</a>
+<%-- Kết quả: href="/ten-app/students/list" --%>
+
+<%-- Tạo URL với tham số (query string) --%>
+<c:url value="/students/search" var="searchUrl">
+    <c:param name="keyword" value="${keyword}"/>
+    <c:param name="page" value="1"/>
+</c:url>
+<a href="${searchUrl}">Tìm kiếm</a>
+<%-- Kết quả: href="/ten-app/students/search?keyword=...&page=1" --%>
+
+ 
+
+ 
+
+🔹 <c:redirect> — Chuyển hướng trang
+<%-- Chuyển về trang login nếu chưa đăng nhập --%>
+<c:if test="${empty sessionScope.loggedUser}">
+    <c:redirect url="/login"/>
+</c:if>
+
+Lưu ý thứ bậc thực chiến — Spring MVC: Kiểm tra đăng nhập nên được thực hiện theo thứ bậc ưu tiên sau: 1. Tốt nhất: Dùng HandlerInterceptor ở tầng Spring — kiểm tra trước khi request vào Controller. 2. Chấp nhận được (khi học): Dùng <c:redirect> trong JSP (như ví dụ trên). 3. Không khuyến nghị: Dùng response.sendRedirect() bằng Scriptlet trong JSP.
+
+ 
+
+ 
+
+🔹 <c:import> — Nhúng nội dung tại thời điểm chạy
+Khác với <%@ include %> (nhúng lúc biên dịch), <c:import> nhúng nội dung tại thời điểm chạy (runtime) và có thể từ URL bên ngoài.
+
+<%-- Nhúng file header dùng chung --%>
+<c:import url="/WEB-INF/views/common/header.jsp"/>
+
+<div class="content">
+    <h1>Nội dung trang</h1>
+</div>
+
+<c:import url="/WEB-INF/views/common/footer.jsp"/>
+
+ 
+
+ 
+
+2.4. Nhóm Formatting — Định dạng dữ liệu (Tiền tố: fmt)
+Khai báo sử dụng:
+
+<%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
+
+ 
+
+ 
+
+🔹 <fmt:formatNumber> — Định dạng số và tiền tệ
+<%-- Định dạng số có dấu phân cách hàng nghìn --%>
+<fmt:formatNumber value="${product.price}" type="number" groupingUsed="true"/>
+<%-- Kết quả: 1,250,000 --%>
+
+<%-- Định dạng tiền tệ theo Locale Việt Nam --%>
+<fmt:formatNumber value="${product.price}" type="currency" currencySymbol="₫"
+    maxFractionDigits="0" groupingUsed="true"/>
+<%-- Kết quả: ₫1,250,000 --%>
+
+<%-- Định dạng số phần trăm --%>
+<fmt:formatNumber value="0.1523" type="percent" maxFractionDigits="1"/>
+<%-- Kết quả: 15.2% --%>
+
+<%-- Định dạng số thập phân với số chữ số nhất định --%>
+<fmt:formatNumber value="${product.weight}" minFractionDigits="2" maxFractionDigits="2"/>
+<%-- Kết quả: 1.50 (kg) --%>
+
+ 
+
+ 
+
+🔹 <fmt:formatDate> — Định dạng ngày giờ
+<%-- Định dạng ngày theo pattern tùy chỉnh --%>
+<fmt:formatDate value="${order.createdDate}" pattern="dd/MM/yyyy HH:mm:ss"/>
+<%-- Kết quả: 01/04/2026 20:30:45 --%>
+
+<%-- Chỉ hiển thị ngày --%>
+<fmt:formatDate value="${order.createdDate}" pattern="dd/MM/yyyy"/>
+<%-- Kết quả: 01/04/2026 --%>
+
+<%-- Dạng có sẵn: SHORT, MEDIUM, LONG, FULL --%>
+<fmt:formatDate value="${order.createdDate}" type="both" dateStyle="LONG" timeStyle="SHORT"/>
+<%-- Kết quả: April 1, 2026 8:30 PM --%>
+
+ 
+
+ 
+
+🔹 <fmt:setLocale> và <fmt:bundle> — Quốc tế hóa (i18n)
+Dùng để hiển thị ứng dụng bằng nhiều ngôn ngữ khác nhau dựa vào file cấu hình ngôn ngữ.
+
+<%-- Đặt ngôn ngữ hiển thị --%>
+<fmt:setLocale value="vi_VN"/>
+
+<%-- Sử dụng file bundle ngôn ngữ (messages_vi.properties) --%>
+<fmt:setBundle basename="messages"/>
+<h1><fmt:message key="app.title"/></h1>
+<p><fmt:message key="welcome.message">
+    <fmt:param value="${sessionScope.loggedUser}"/>
+</fmt:message></p>
+
+ 
+
+ 
+
+2.5. Nhóm Functions — Hàm xử lý chuỗi (Tiền tố: fn)
+Khai báo sử dụng:
+
+<%@ taglib prefix="fn" uri="jakarta.tags.functions" %>
+
+Nhóm Functions cung cấp các hàm dùng trực tiếp bên trong biểu thức EL ${}:
+
+Hàm
+
+Mô tả
+
+Lưu ý null
+
+fn:length(obj)
+
+Độ dài chuỗi / kích thước collection
+
+Trả về 0 nếu null
+
+fn:toUpperCase(str)
+
+Chuyển thành chữ hoa
+
+Lỗi nếu str null
+
+fn:toLowerCase(str)
+
+Chuyển thành chữ thường
+
+Lỗi nếu str null
+
+fn:trim(str)
+
+Xóa khoảng trắng hai đầu
+
+Lỗi nếu str null
+
+fn:contains(str, sub)
+
+Kiểm tra có chứa chuỗi con không
+
+Lỗi nếu str null
+
+fn:startsWith(str, pre)
+
+Kiểm tra bắt đầu bằng tiền tố
+
+Lỗi nếu str null
+
+fn:endsWith(str, suf)
+
+Kiểm tra kết thúc bằng hậu tố
+
+Lỗi nếu str null
+
+fn:replace(str, old, new)
+
+Thay thế tất cả chuỗi con
+
+Lỗi nếu str null
+
+fn:split(str, delim)
+
+Tách chuỗi thành mảng
+
+Lỗi nếu str null
+
+fn:join(arr, sep)
+
+Nối mảng thành chuỗi
+
+Lỗi nếu arr null
+
+fn:substring(str, s, e)
+
+Cắt chuỗi từ vị trí s đến e
+
+Lỗi nếu str null
+
+fn:indexOf(str, sub)
+
+Vị trí xuất hiện chuỗi con
+
+Lỗi nếu str null
+
+fn:escapeXml(str)
+
+Mã hóa ký tự XML/HTML
+
+An toàn với null
+
+Cảnh báo null safety: Hầu hết các hàm fn:* sẽ ném NullPointerException nếu đầu vào là null. Hãy kiểm tra null trước bằng <c:if test="${not empty biến}"> trước khi gọi các hàm này.
+
+Ví dụ thực tế:
+
+<%@ taglib prefix="c"  uri="jakarta.tags.core" %>
+<%@ taglib prefix="fn" uri="jakarta.tags.functions" %>
+
+<%-- Hiển thị số lượng sản phẩm --%>
+<p>Tổng số sản phẩm: <strong>${fn:length(productList)}</strong></p>
+
+<%-- Kiểm tra null trước khi dùng fn (tránh NullPointerException) --%>
+<c:if test="${not empty user.email}">
+    <c:if test="${fn:contains(user.email, '@')}">
+        <span class="valid"> Email hợp lệ</span>
+    </c:if>
+</c:if>
+
+<%-- Tóm tắt mô tả sản phẩm — chỉ hiển thị 100 ký tự đầu --%>
+<c:if test="${not empty product.description}">
+    <p>
+        ${fn:substring(product.description, 0, 100)}
+        <c:if test="${fn:length(product.description) > 100}">...</c:if>
+    </p>
+</c:if>
+
+<%-- Kiểm tra file PDF --%>
+<c:if test="${not empty attachment.name}">
+    <c:if test="${fn:toUpperCase(fn:substring(attachment.name,
+        fn:length(attachment.name) - 3, fn:length(attachment.name))) == 'PDF'}">
+        <img src="/icons/pdf-icon.png" alt="PDF"/>
+    </c:if>
+</c:if>
+
+ 
+
+ 
+
+3. Tổng kết & Lưu ý
+Bảng so sánh 5 nhóm thư viện JSTL
+Nhóm
+
+Prefix
+
+Thẻ đặc trưng
+
+Dùng trong Spring MVC?
+
+Core
+
+c
+
+c:forEach, c:if, c:choose, c:url, c:out
+
+Thường xuyên
+
+Formatting
+
+fmt
+
+fmt:formatNumber, fmt:formatDate, fmt:message
+
+ Thường xuyên
+
+Functions
+
+fn
+
+fn:length, fn:contains, fn:substring
+
+ Khi cần
+
+XML
+
+x
+
+x:parse, x:forEach, x:transform
+
+ Ít dùng
+
+SQL
+
+sql
+
+sql:query, sql:update
+
+ Không dùng (vi phạm MVC)
+
+ 
+
+ 
+
+Bảng so sánh Scriptlet Java vs JSTL
+Tiêu chí
+
+Scriptlet Java <% %>
+
+JSTL <c:...>
+
+Khả năng đọc
+
+Khó đọc, rối HTML
+
+Dễ đọc như HTML thuần
+
+Thân thiện với Frontend
+
+Frontend không hiểu
+
+Quen thuộc với HTML devs
+
+Bảo mật XSS
+
+Không tự mã hóa
+
+<c:out> tự escape
+
+Tuân thủ MVC
+
+Dễ nhúng logic Java vào View
+
+Chỉ xử lý hiển thị
+
+Debug & bảo trì
+
+Khó
+
+Dễ
+
+Được khuyến nghị
+
+Hạn chế tối đa
+
+Ưu tiên sử dụng
+
+ 
+
+ 
+
+Quy tắc vàng khi dùng JSTL trong Spring MVC thuần
+Luôn khai báo <%@ taglib %> trước khi dùng bất kỳ thẻ JSTL nào — quên khai báo là lỗi ngay.
+Ưu tiên <c:out> hơn EL ${} thuần khi in dữ liệu người dùng nhập vào — chủ động phòng chống XSS.
+Dùng <c:url> thay vì hardcode đường dẫn — đảm bảo hoạt động đúng dù ứng dụng được deploy ở bất kỳ context path nào.
+Tuyệt đối không dùng nhóm SQL trong JSP — mọi thao tác Database phải nằm ở tầng Repository/DAO trong Spring MVC.
+JSTL + EL là cặp đôi hoàn hảo — JSTL cung cấp cấu trúc điều khiển, EL cung cấp dữ liệu. Không cần Scriptlet nếu dùng tốt hai công cụ này.
+Kiểm tra null trước khi gọi hàm fn:* — nhiều hàm trong nhóm Functions sẽ ném NullPointerException nếu đầu vào là null.
