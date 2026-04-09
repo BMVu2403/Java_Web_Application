@@ -1,0 +1,28 @@
+Phần 1 — Phân tích logic
+
+
+Tại sao /api/* gây lỗi 404: Cấu hình getServletMappings() xác định các URL mà
+DispatcherServlet sẽ tiếp nhận xử lý. Khi đặt là {"/api/*"}, Spring chỉ lắng nghe
+các request bắt đầu bằng /api/ (ví dụ: /demo/api/welcome). Do đó, khi bạn truy cập
+/demo/welcome, Tomcat không tìm thấy Servlet nào khớp với URL này và trả về lỗi
+404 Not Found.
+DispatcherServlet đang nghe: Chỉ các URL có tiền tố /api/.
+
+
+
+Lỗi trong WebConfig.java:
+Hậu quả của @ComponentScan(basePackages = "com.demo.service"): Annotation này chỉ
+thị cho Spring chỉ tìm kiếm các Bean (như @Service, @Component) trong package
+com.demo.service.
+Vấn đề với @Controller: Spring MVC tìm @Controller trong package được quét.
+Tuy nhiên, WelcomeController lại nằm ở package com.demo.controller. Vì package này
+không được quét, Spring sẽ không khởi tạo Controller này, dẫn đến việc không thể
+ánh xạ URL /welcome vào phương thức xử lý.
+
+
+Tổng hợp:
+Nếu chỉ sửa lỗi 1 mà không sửa lỗi 2: Ứng dụng vẫn không chạy được.
+Tại sao: Dù DispatcherServlet đã nhận được request tại /welcome, nhưng
+vì lỗi @ComponentScan ở bước 2, Spring vẫn không tìm thấy bất kỳ Controller
+nào để xử lý request đó. Kết quả là hệ thống vẫn sẽ báo lỗi
+(thường là 404 hoặc lỗi cấu hình Bean) vì không có Handler nào được đăng ký cho URL này.

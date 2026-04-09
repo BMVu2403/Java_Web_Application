@@ -1,0 +1,18 @@
+Thông báo lỗi đăng nhập (Request vs Session):
+Tại sao dùng Request Scope: Thông báo lỗi chỉ cần hiển thị một lần ngay sau khi đăng nhập sai.
+Request Scope sẽ tự động biến mất sau khi trang được hiển thị xong.
+Nếu dùng Session: Thông báo lỗi sẽ "dính" chặt ở đó. Khi người dùng F5 hoặc quay lại trang login
+dòng chữ "Sai mật khẩu" vẫn hiện ra dù họ chưa kịp bấm đăng nhập lại, gây trải nghiệm rất tệ.
+
+Bộ đếm totalViewCount (Application vs Session):
+Tại sao dùng Application Scope: Đây là dữ liệu dùng chung toàn hệ thống. Application Scope tồn tại
+từ khi server chạy đến khi server tắt và mọi người dùng đều nhìn thấy chung một giá trị.
+Nếu dùng Session: Mỗi nhân viên sẽ có một bộ đếm riêng. Nhân viên A xem 3 lần thấy số 3, nhân viên B
+mới vào xem 1 lần sẽ thấy số 1. Không đạt được yêu cầu "đếm tổng toàn hệ thống".
+
+Race Condition & Cách phòng tránh:
+Race Condition là gì: Là hiện tượng khi nhiều "luồng" (users) cùng truy cập và sửa đổi một dữ liệu
+dùng chung cùng một lúc.
+Tại sao đoạn code trên bị: Khi User A và B cùng đọc số count = 10 cùng lúc, cả hai cùng tăng lên 11
+rồi ghi đè lên nhau. Lẽ ra tổng phải là 12, nhưng kết quả cuối cùng chỉ là 11.
+Cách phòng tránh: Dùng khối synchronized để khóa dữ liệu khi đang ghi, hoặc dùng lớp AtomicInteger để đảm bảo tính an toàn.

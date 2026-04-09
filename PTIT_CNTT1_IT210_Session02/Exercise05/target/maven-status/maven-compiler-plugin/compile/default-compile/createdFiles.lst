@@ -1,5 +1,0 @@
-com\example\hrportal\config\WebConfig.class
-com\example\hrportal\controller\AuthController.class
-com\example\hrportal\model\UserAccount.class
-com\example\hrportal\config\WebAppInitializer.class
-com\example\hrportal\service\AuthService.class

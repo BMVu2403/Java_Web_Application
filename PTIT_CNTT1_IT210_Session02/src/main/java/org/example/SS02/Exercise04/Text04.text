@@ -1,0 +1,19 @@
+XSS là gì?
+
+XSS (Cross-Site Scripting) là lỗ hổng cho phép kẻ tấn công chèn các đoạn mã script nguy hiểm
+(thường là JavaScript) vào trang web. Khi người dùng khác xem trang, trình duyệt sẽ thực thi đoạn mã đó.
+<c:out value="${keyword}"/> an toàn hơn ${keyword} vì nó thực hiện Escape HTML.
+Ví dụ: dấu < sẽ biến thành &lt;.
+So sánh Output: * Dùng ${keyword}: <script>alert(1)</script> (Trình duyệt thực thi, hiện popup).
+Dùng <c:out>: &lt;script&gt;alert(1)&lt;/script&gt; (Trình duyệt chỉ hiển thị dạng văn bản, không chạy code).
+
+Sự khác nhau giữa <c:if> và <c:choose>:
+<c:if>: Dùng khi chỉ có một điều kiện đơn giản (đúng thì làm, sai thì thôi).
+<c:choose>: Tương đương với switch-case hoặc if-elseif-else. Dùng khi có từ 3 nhánh logic trở lên.
+Áp dụng: Phần "Giá vé" và "Vé còn lại" nên dùng <c:choose> vì có nhiều trạng thái
+(Hết vé/Sắp hết/Bình thường hoặc Miễn phí/Có phí).
+
+Lợi ích của <c:url>:
+Nó tự động thêm Context Path (tên project) vào trước đường dẫn.
+Nếu bạn deploy tại /ticketing, <c:url value="/events/1"/> sẽ tự sinh ra /ticketing/events/1
+Nếu bạn hardcode href="/events/1", đường dẫn sẽ bị sai (lỗi 404) vì thiếu tên project.
